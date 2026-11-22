@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Code — Ucupz</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+  <link rel="icon" type="image/png" href="../favicon-512.png" />
+  <link rel="apple-touch-icon" href="../favicon-180.png" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="app-page">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <!-- Skeleton loading — tampil sebelum JS berjalan -->
+  <div id="page-skeleton" class="qr-page-skeleton" aria-hidden="true">
+    <div class="skeleton qr-skeleton-title"></div>
+    <div class="skeleton qr-skeleton-subtitle"></div>
+    <div class="skeleton skeleton-card qr-skeleton-card"></div>
+    <div class="skeleton skeleton-card qr-skeleton-card"></div>
+  </div>
+
+  <main class="main-content is-hidden" id="main-app-content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Generator QR Code</h1>
+        <p class="page-sub">Buat QR Code dari tautan, teks, WiFi, dan lainnya — dengan kustomisasi warna &amp; logo.</p>
+      </div>
+    </div>
+
+    <div class="qr-layout">
+      <!-- Kiri: Input & Kustomisasi -->
+      <div class="qr-form-column">
+        <div class="card">
+          <h3 class="section-title qr-type-title">Tipe Konten</h3>
+          <div class="input-type-grid">
+            <button type="button" class="itype-btn active" data-type="url"><span class="itype-icon">🔗</span>URL</button>
+            <button type="button" class="itype-btn" data-type="text"><span class="itype-icon">📝</span>Teks</button>
+            <button type="button" class="itype-btn" data-type="wa"><span class="itype-icon">💬</span>WhatsApp</button>
+            <button type="button" class="itype-btn" data-type="wifi"><span class="itype-icon">📶</span>WiFi</button>
+            <button type="button" class="itype-btn" data-type="email"><span class="itype-icon">📧</span>Surel</button>
+          </div>
+          <!-- URL -->
+          <div class="input-pane active" id="pane-url">
+            <div class="form-group">
+              <label class="form-label" for="inp-url">URL / Tautan</label>
+              <input type="url" id="inp-url" class="form-input qr-live-input" placeholder="https://contoh.com" maxlength="2000" />
+            </div>
+          </div>
+          <!-- Teks -->
+          <div class="input-pane" id="pane-text">
+            <div class="form-group">
+              <label class="form-label" for="inp-text">Teks bebas</label>
+              <textarea id="inp-text" class="form-input qr-live-input" rows="3" placeholder="Masukkan teks apapun..." maxlength="900"></textarea>
+            </div>
+          </div>
+          <!-- WhatsApp -->
+          <div class="input-pane" id="pane-wa">
+            <div class="form-group">
+              <label class="form-label" for="inp-wa-number">Nomor WhatsApp</label>
+              <input type="tel" id="inp-wa-number" class="form-input qr-live-input" data-sanitize="digits" placeholder="628123456789 (dengan kode negara, tanpa +)" maxlength="20" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="inp-wa-msg">Pesan awal (opsional)</label>
+              <textarea id="inp-wa-msg" class="form-input qr-live-input" rows="2" placeholder="Halo, saya ingin bertanya..." maxlength="500"></textarea>
+            </div>
+          </div>
+          <!-- WiFi -->
+          <div class="input-pane" id="pane-wifi">
+            <div class="form-group">
+              <label class="form-label" for="inp-wifi-ssid">Nama WiFi (SSID)</label>
+              <input type="text" id="inp-wifi-ssid" class="form-input qr-live-input" data-sanitize="wifi-ssid" placeholder="NamaWiFiKamu" maxlength="100" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="inp-wifi-pass">Kata Sandi</label>
+              <input type="text" id="inp-wifi-pass" class="form-input qr-live-input" data-sanitize="wifi-pass" placeholder="SandiWiFi" maxlength="100" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Enkripsi</label>
+              <div class="format-pills">
+                <label class="format-pill"><input type="radio" name="wifi-enc" value="WPA" checked /> WPA/WPA2</label>
+                <label class="format-pill"><input type="radio" name="wifi-enc" value="WEP" /> WEP</label>
+                <label class="format-pill"><input type="radio" name="wifi-enc" value="nopass" /> Tanpa sandi</label>
+              </div>
+            </div>
+          </div>
+          <!-- Surel -->
+          <div class="input-pane" id="pane-email">
+            <div class="form-group">
+              <label class="form-label" for="inp-email-addr">Alamat Surel</label>
+              <input type="email" id="inp-email-addr" class="form-input qr-live-input" placeholder="tujuan@surel.com" maxlength="200" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="inp-email-subj">Subjek (opsional)</label>
+              <input type="text" id="inp-email-subj" class="form-input qr-live-input" data-sanitize="email-subject" placeholder="Perihal surel..." maxlength="200" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="inp-email-body">Isi pesan (opsional)</label>
+              <textarea id="inp-email-body" class="form-input qr-live-input" rows="2" placeholder="Isi pesan..." maxlength="500"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kustomisasi -->
+        <div class="card">
+          <h3 class="section-title qr-custom-title">Kustomisasi</h3>
+          <div class="divider"></div>
+          <div class="custom-section">
+            <div class="custom-row">
+              <div><p class="custom-label">Warna QR Code</p><p class="custom-desc">Warna titik-titik QR</p></div>
+              <div>
+                <div class="color-input-wrap">
+                  <input type="color" id="color-fg" value="#000000" class="color-swatch-input" data-color-picker="fg" />
+                  <input type="text" id="color-fg-hex" value="#000000" class="color-hex-input" maxlength="7" data-color-hex="fg" />
+                </div>
+                <div class="color-presets" id="presets-fg">
+                  <button class="color-preset active" data-color-side="fg" data-color="#000000" aria-label="Hitam"></button>
+                  <button class="color-preset" data-color-side="fg" data-color="#7c6aff" aria-label="Ungu"></button>
+                  <button class="color-preset" data-color-side="fg" data-color="#ff6ab0" aria-label="Merah muda"></button>
+                  <button class="color-preset" data-color-side="fg" data-color="#00d4a8" aria-label="Hijau toska"></button>
+                  <button class="color-preset" data-color-side="fg" data-color="#ff6b6b" aria-label="Merah"></button>
+                  <button class="color-preset" data-color-side="fg" data-color="#1a1a2e" aria-label="Biru gelap"></button>
+                  <button class="color-preset" data-color-side="fg" data-color="#2563eb" aria-label="Biru"></button>
+                  <button class="color-preset" data-color-side="fg" data-color="#16a34a" aria-label="Hijau"></button>
+                </div>
+              </div>
+            </div>
+            <div class="custom-row">
+              <div><p class="custom-label">Warna Latar</p><p class="custom-desc">Warna latar belakang QR</p></div>
+              <div>
+                <div class="color-input-wrap">
+                  <input type="color" id="color-bg" value="#ffffff" class="color-swatch-input" data-color-picker="bg" />
+                  <input type="text" id="color-bg-hex" value="#ffffff" class="color-hex-input" maxlength="7" data-color-hex="bg" />
+                </div>
+                <div class="color-presets" id="presets-bg">
+                  <button class="color-preset active" data-color-side="bg" data-color="#ffffff" aria-label="Putih"></button>
+                  <button class="color-preset" data-color-side="bg" data-color="#f0f0ff" aria-label="Lavender muda"></button>
+                  <button class="color-preset" data-color-side="bg" data-color="#fff7ed" aria-label="Krem"></button>
+                  <button class="color-preset" data-color-side="bg" data-color="#f0fdf4" aria-label="Hijau muda"></button>
+                  <button class="color-preset" data-color-side="bg" data-color="#0e0e1a" aria-label="Hitam"></button>
+                  <button class="color-preset" data-color-side="bg" data-color="#1e293b" aria-label="Biru gelap"></button>
+                  <button class="color-preset" data-color-side="bg" data-color="#fef9c3" aria-label="Kuning muda"></button>
+                  <button class="color-preset" data-color-side="bg" data-color="#fce7f3" aria-label="Merah muda"></button>
+                </div>
+              </div>
+            </div>
+            <div class="custom-row">
+              <div><p class="custom-label">Ukuran keluaran</p><p class="custom-desc">Resolusi file yang diunduh</p></div>
+              <div class="format-pills">
+                <label class="format-pill"><input type="radio" name="qr-size" value="256" /> Kecil</label>
+                <label class="format-pill"><input type="radio" name="qr-size" value="512" checked /> Sedang</label>
+                <label class="format-pill"><input type="radio" name="qr-size" value="1024" /> Besar</label>
+              </div>
+            </div>
+            <div class="custom-row">
+              <div><p class="custom-label">Level koreksi galat</p><p class="custom-desc">Makin tinggi → makin tahan rusak</p></div>
+              <div class="format-pills">
+                <label class="format-pill"><input type="radio" name="qr-ecl" value="L" /> L</label>
+                <label class="format-pill"><input type="radio" name="qr-ecl" value="M" checked /> M</label>
+                <label class="format-pill"><input type="radio" name="qr-ecl" value="Q" /> Q</label>
+                <label class="format-pill"><input type="radio" name="qr-ecl" value="H" /> H</label>
+              </div>
+            </div>
+            <div class="custom-row qr-logo-row">
+              <div>
+                <p class="custom-label">Logo di tengah (opsional)</p>
+                <p class="custom-desc">Gunakan level koreksi Q atau H agar QR tetap bisa dibaca</p>
+              </div>
+              <div class="qr-logo-controls">
+                <button type="button" class="logo-upload-zone" data-action="choose-logo">
+                  <span id="logo-upload-label">📎 Klik untuk unggah logo (PNG/JPG)</span>
+                </button>
+                <input type="file" id="logo-input" accept="image/*" class="is-hidden" />
+                <button type="button" class="btn btn-secondary is-hidden qr-remove-logo" id="btn-remove-logo" data-action="remove-logo">✕ Hapus</button>
+              </div>
+              <div class="qr-logo-size is-hidden" id="logo-size-row">
+                <span class="qr-logo-size-label">Ukuran logo: <span id="logo-size-val">22</span>%</span>
+                <input type="range" id="logo-size" min="10" max="35" value="22" class="slider" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Riwayat -->
+        <div class="card is-hidden" id="history-card">
+          <div class="qr-history-header">
+            <h3 class="section-title qr-history-title">Riwayat</h3>
+            <button type="button" class="btn btn-secondary qr-clear-history" data-action="clear-history">Hapus Semua</button>
+          </div>
+          <div id="history-list"></div>
+        </div>
+      </div>
+
+      <!-- Kanan: Preview -->
+      <div class="qr-preview-card">
+        <h3 class="section-title qr-preview-title">Pratinjau</h3>
+        <div class="qr-canvas-wrap" id="qr-canvas-wrap">
+          <div class="qr-placeholder" id="qr-placeholder">
+            <span class="qr-placeholder-icon">📲</span>
+            <span>Isi konten untuk<br>membuat QR Code</span>
+          </div>
+          <div id="qr-container" class="is-hidden"></div>
+          <div id="logo-overlay"><img id="logo-img" src="" alt="logo" /></div>
+        </div>
+        <div class="qr-info" id="qr-info">
+          <div class="qr-info-row"><span>Tipe</span><span id="info-type">—</span></div>
+          <div class="qr-info-row"><span>Karakter</span><span id="info-chars">—</span></div>
+          <div class="qr-info-row"><span>Level galat</span><span id="info-ecl">—</span></div>
+        </div>
+        <div class="qr-actions is-hidden" id="qr-actions">
+          <button class="btn btn-primary" data-action="download-qr" data-format="png">⬇ PNG</button>
+          <button class="btn btn-secondary" data-action="download-qr" data-format="svg">⬇ SVG</button>
+        </div>
+        <div class="qr-actions is-hidden" id="qr-actions2">
+          <button class="btn btn-secondary" data-action="copy-qr">📋 Salin Gambar</button>
+          <button class="btn btn-secondary" data-action="share-qr">📤 Bagikan</button>
+        </div>
+        <p class="qr-generate-hint" id="qr-generate-hint">
+          QR Code dibuat otomatis saat kamu mengetik.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <canvas id="export-canvas" class="is-hidden"></canvas>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/pages/qrcode.js"></script>
+  <script src="../js/sw-register.js"></script>
+</body>
+</html>

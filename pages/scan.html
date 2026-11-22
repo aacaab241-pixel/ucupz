@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#020617" />
+  <title>Scan QR — Ucupz</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+  <link rel="icon" type="image/png" href="../favicon-512.png" />
+  <link rel="apple-touch-icon" href="../favicon-180.png" />
+</head>
+<body class="app-page">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main-content scan-main">
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">Scan QR Code</h1>
+        <p class="page-sub">Pindai kode QR menggunakan kamera atau pilih gambar dari perangkat.</p>
+      </div>
+    </header>
+
+    <section class="card scan-card" aria-label="Pemindai QR">
+      <div class="scan-preview" id="scan-preview">
+        <video id="scan-video" playsinline muted aria-label="Tampilan kamera"></video>
+        <div class="scan-placeholder" id="scan-placeholder">
+          <span aria-hidden="true">⌗</span>
+          <p>Kamera belum dimulai</p>
+        </div>
+        <div class="scan-frame" aria-hidden="true"></div>
+      </div>
+
+      <p class="scan-status" id="scan-status" role="status" aria-live="polite">Siap memindai kode QR.</p>
+      <div class="scan-actions">
+        <button class="btn btn-primary" id="scan-start" type="button">Mulai Kamera</button>
+        <button class="btn btn-secondary" id="scan-stop" type="button" disabled>Hentikan</button>
+        <label class="btn btn-secondary scan-upload" for="scan-file">Pilih Gambar</label>
+        <input id="scan-file" type="file" accept="image/*" hidden />
+      </div>
+    </section>
+
+    <section class="card scan-result-card" id="scan-result-card" hidden>
+      <h2 class="section-title">Hasil pemindaian</h2>
+      <p class="scan-result-text" id="scan-result-text"></p>
+      <div class="scan-result-actions">
+        <a class="btn btn-primary" id="scan-open" target="_blank" rel="noopener noreferrer" hidden>Buka tautan</a>
+        <button class="btn btn-secondary" id="scan-copy" type="button">Salin hasil</button>
+        <button class="btn btn-secondary" id="scan-again" type="button">Pindai lagi</button>
+      </div>
+    </section>
+  </main>
+
+  <canvas id="scan-canvas" hidden></canvas>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/pages/scan.js"></script>
+  <script src="../js/sw-register.js"></script>
+</body>
+</html>

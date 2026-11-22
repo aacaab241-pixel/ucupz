@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Convert — Ucupz</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/pages.css" />
+  <link rel="icon" type="image/png" href="../favicon-512.png" />
+  <link rel="apple-touch-icon" href="../favicon-180.png" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body class="app-page">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="main-content" id="skeleton-screen" aria-hidden="true">
+    <div class="skeleton-page">
+      <div class="skeleton-grid">
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+        <div class="skeleton skeleton-tool-card"></div>
+      </div>
+    </div>
+  </main>
+
+  <main class="main-content converter-main" id="main-content" hidden>
+    <header class="page-header converter-page-header">
+      <div>
+        <h1 class="page-title">Convert</h1>
+        <p class="page-sub">Pilih alat untuk mulai mengolah file.</p>
+      </div>
+    </header>
+
+    <div class="converter-utility-actions">
+      <button class="batch-trigger-btn" type="button" data-action="batch-open">
+        <span class="batch-trigger-icon">⚡</span>
+        <span class="batch-trigger-copy"><strong>Proses banyak gambar</strong><small>Mode batch</small></span>
+        <span class="batch-trigger-arrow" aria-hidden="true">↗</span>
+      </button>
+    </div>
+
+    <div id="tool-grid-section">
+      <p class="grid-cat-label">PDF <span>10 ALAT</span></p>
+      <div class="tool-grid">
+        <div class="tool-card" role="button" tabindex="0" data-tool="merge"><div class="tc-icon">🔗</div><div class="tc-title">Gabung PDF</div><div class="tc-desc">Satukan beberapa PDF</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="split"><div class="tc-icon">✂️</div><div class="tc-title">Pisah PDF</div><div class="tc-desc">Pisah halaman PDF</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="rotate"><div class="tc-icon">🔄</div><div class="tc-title">Putar PDF</div><div class="tc-desc">Putar halaman PDF</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="deletepages"><div class="tc-icon">🗑</div><div class="tc-title">Hapus Halaman</div><div class="tc-desc">Buang halaman tertentu</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="compresspdf"><div class="tc-icon">🗜</div><div class="tc-title">Kompres PDF</div><div class="tc-desc">Perkecil ukuran file</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="watermarkpdf"><div class="tc-icon">💧</div><div class="tc-title">Tanda Air PDF</div><div class="tc-desc">Tanda air di setiap halaman</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="passwordpdf"><div class="tc-icon">🔐</div><div class="tc-title">Sandi PDF</div><div class="tc-desc">Proteksi dengan sandi</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="pdf2txt"><div class="tc-icon">📑</div><div class="tc-title">PDF ke Teks</div><div class="tc-desc">Ekstrak teks dari PDF</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="img2pdf"><div class="tc-icon">🖼</div><div class="tc-title">Gambar ke PDF</div><div class="tc-desc">JPG/PNG jadi dokumen</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="pdf2img"><div class="tc-icon">📄</div><div class="tc-title">PDF ke JPG</div><div class="tc-desc">Setiap halaman jadi gambar JPG</div></div>
+      </div>
+
+      <p class="grid-cat-label">Gambar <span>13 ALAT</span></p>
+      <div class="tool-grid">
+        <div class="tool-card" role="button" tabindex="0" data-tool="imgconvert"><div class="tc-icon">🔁</div><div class="tc-title">Konversi Format</div><div class="tc-desc">JPG ↔ PNG ↔ WEBP</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="compress"><div class="tc-icon">🗜</div><div class="tc-title">Kompres</div><div class="tc-desc">Perkecil ukuran file</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="resize"><div class="tc-icon">📐</div><div class="tc-title">Ubah Ukuran</div><div class="tc-desc">Ubah dimensi gambar</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="crop"><div class="tc-icon">✂️</div><div class="tc-title">Potong</div><div class="tc-desc">Potong area gambar</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="rotate_img"><div class="tc-icon">🔄</div><div class="tc-title">Putar / Balik</div><div class="tc-desc">Putar &amp; mirror gambar</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="adjust"><div class="tc-icon">🎛</div><div class="tc-title">Sesuaikan</div><div class="tc-desc">Kecerahan, Kontras, Saturasi</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="grayscale"><div class="tc-icon">🎨</div><div class="tc-title">Skala Abu-abu</div><div class="tc-desc">Ubah ke hitam putih</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="blur"><div class="tc-icon">🌫</div><div class="tc-title">Efek Blur</div><div class="tc-desc">Tambahkan efek blur</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="watermarkimg"><div class="tc-icon">💧</div><div class="tc-title">Tanda Air</div><div class="tc-desc">Tempel teks di foto</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="exif"><div class="tc-icon">📋</div><div class="tc-title">Penampil EXIF</div><div class="tc-desc">Lihat &amp; hapus metadata</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="base64img"><div class="tc-icon">🔤</div><div class="tc-title">Gambar → Base64</div><div class="tc-desc">Encode untuk embed HTML</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="mergeimg"><div class="tc-icon">🧩</div><div class="tc-title">Gabung Gambar</div><div class="tc-desc">Susun jadi satu kanvas</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="ascii"><div class="tc-icon">🎨</div><div class="tc-title">Seni ASCII</div><div class="tc-desc">Gambar ke karakter teks</div></div>
+      </div>
+
+      <p class="grid-cat-label">Dokumen <span>3 ALAT</span></p>
+      <div class="tool-grid" id="document-tools-grid">
+        <div class="tool-card" role="button" tabindex="0" data-tool="md2html"><div class="tc-icon">📝</div><div class="tc-title">Markdown → HTML</div><div class="tc-desc">Konversi .md ke halaman web</div></div>
+        <div class="tool-card" role="button" tabindex="0" data-tool="csv2json"><div class="tc-icon">📊</div><div class="tc-title">CSV ↔ JSON</div><div class="tc-desc">Konversi format data</div></div>
+      </div>
+    </div>
+
+    <div id="tool-panel">
+      <div class="panel-header">
+        <button class="panel-back" type="button" data-action="close-tool">← Kembali</button>
+        <div>
+          <h2 id="panel-title" class="panel-title-text"></h2>
+          <p id="panel-desc" class="panel-desc-text"></p>
+        </div>
+      </div>
+      <div class="card">
+        <label class="upload-zone" id="panel-dropzone" for="panel-input">
+          <div class="upload-icon" id="panel-upload-icon">📂</div>
+          <p class="upload-label" id="panel-upload-label">Klik atau seret file ke sini</p>
+          <p class="upload-hint" id="panel-upload-hint">—</p>
+          <input type="file" id="panel-input" class="file-input-hidden" />
+        </label>
+        <div class="file-list" id="file-list"></div>
+        <div id="img-source-preview-wrap" class="image-source-preview-wrap">
+          <img id="img-source-preview" src="" alt="Pratinjau gambar" class="image-source-preview" />
+        </div>
+        <div id="tool-options" class="tool-options"></div>
+        <div class="mt-action" id="action-row">
+          <button class="btn btn-primary" id="btn-process" type="button" data-action="process-file" disabled>⚡ Proses</button>
+          <button class="btn btn-secondary" id="btn-clear" type="button" data-action="clear-files">🗑 Hapus</button>
+        </div>
+        <div class="progress-bar" id="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="result-box" id="result-box">
+          <div class="result-icon">✅</div>
+          <div class="result-copy">
+            <p class="result-title-text" id="result-title">Selesai!</p>
+            <p class="result-desc-text" id="result-desc"></p>
+          </div>
+          <div class="flex-wrap-gap" id="result-buttons"></div>
+        </div>
+      </div>
+    </div>
+
+    <canvas id="work-canvas" hidden></canvas>
+    <canvas id="work-canvas2" hidden></canvas>
+  </main>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/ui.js"></script>
+  <script src="../js/batch-processor.js"></script>
+  <script src="../js/history-converter.js"></script>
+  <script src="../js/svg-optimizer.js"></script>
+  <script src="../js/pages/converter.js"></script>
+  <script src="../js/sw-register.js"></script>
+</body>
+  </html>
