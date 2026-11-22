@@ -3,7 +3,7 @@
 // Ganti CACHE_VERSION setiap kali ada update agar SW refresh
 // ============================================================
 
-const CACHE_VERSION = "ucupz-v7";
+const CACHE_VERSION = "ucupz-v9";
 const CACHE_STATIC  = CACHE_VERSION + "-static";
 
 // File yang di-cache untuk offline
@@ -14,13 +14,6 @@ const STATIC_FILES = [
   "/manifest.json",
   "/css/style.css",
   "/css/pages.css",
-  "/js/config.js",
-  "/js/ui.js",
-  "/js/utils.js",
-  "/js/batch-processor.js",
-  "/js/history-converter.js",
-  "/js/svg-optimizer.js",
-  "/js/sw-register.js",
   "/js/pages/converter.js",
   "/js/pages/scan.js",
   "/js/pages/qrcode.js",
@@ -28,6 +21,7 @@ const STATIC_FILES = [
   "/pages/scan.html",
   "/pages/qrcode.html",
   "/favicon.png",
+  "/favicon-512.png",
 ];
 
 // ── Install: cache semua file statis ─────────────────────

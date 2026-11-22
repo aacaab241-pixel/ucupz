@@ -1,7 +1,1817 @@
-// ============================================================
-// js/pages/converter.js — Logic halaman Converter
-// Depends: config.js, utils.js, ui.js (harus di-load lebih dulu)
-// ============================================================
+
+// ===== Konfigurasi =====
+
+/**
+ * Key localStorage yang digunakan aplikasi.
+ */
+const STORAGE_KEYS = {
+  SETTINGS: "settings",
+  QR_HIST:  "qr_history",
+  ACTIVITY: "activity_log",
+  PROCESSED: "total_processed",
+  CONVERTER_HISTORY: "converter_history",
+};
+
+// ===== Utilitas =====
+
+/**
+ * Bersihkan string sebelum ditampilkan atau disimpan dari input pengguna.
+ *
+ * @param {string} str
+ * @param {number} [maxLen=200]
+ * @returns {string}
+ */
+function sanitizeString(str, maxLen = 200) {
+  if (typeof str !== "string") return "";
+  return str.trim().slice(0, maxLen).replace(/[<>"'`]/g, "");
+}
+
+/**
+ * Membersihkan key localStorage yang tidak digunakan aplikasi.
+ *
+ * @returns {void}
+ */
+function initLocalApp() {
+  cleanUnknownStorageKeys();
+}
+
+/**
+ * Hapus key localStorage yang tidak digunakan aplikasi.
+ */
+function cleanUnknownStorageKeys() {
+  const allowed = new Set(Object.values(STORAGE_KEYS));
+  Object.keys(localStorage).forEach(key => {
+    if (!allowed.has(key)) localStorage.removeItem(key);
+  });
+}
+
+// ===== UI bersama =====
+
+/**
+ * Render navigasi desktop dan mobile.
+ * @param {string} activePage
+ */
+function renderSidebar(activePage) {
+  const pages = [
+    { id:"converter", href:"converter.html", label:"Convert", labelShort:"Convert" },
+    { id:"scan",      href:"scan.html",      label:"Scan QR", labelShort:"Scan QR" },
+    { id:"qrcode",    href:"qrcode.html",    label:"QR Code", labelShort:"QR Code" },
+  ];
+
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar) {
+    sidebar.innerHTML = `
+      <div class="sidebar-brand">
+        <a class="brand-lockup" href="converter.html" aria-label="Ucupz">
+          <span class="brand-icon" aria-hidden="true"><img src="../favicon-512.png" alt="" /></span>
+          <span class="brand-name">Ucupz <span>${activePage === "converter" ? "Convert" : activePage === "scan" ? "Scan QR" : "QR Code"}</span></span>
+        </a>
+        <span class="offline-status"><span aria-hidden="true"></span> Offline Ready</span>
+        <div class="header-actions">
+          <button class="header-icon-button install-app-button" type="button" data-action="install-app" aria-label="Instal aplikasi" title="Instal aplikasi">Instal</button>
+          <button class="header-icon-button" type="button" data-action="toggle-theme" aria-label="Ganti tema" title="Ganti tema">☼</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (!document.getElementById("mobile-navbar")) {
+    const mobileItems = pages.map(page => {
+      const active = activePage === page.id;
+      const center = page.id === "scan";
+      const icons = {
+        converter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-9m3 10H4m12-13 3 3-3 3M8 14l-3 3 3 3"/></svg>',
+        scan: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3m0 8v3a1 1 0 0 1-1 1h-3m-8 0H5a1 1 0 0 1-1-1v-3M8 12h8"/></svg>',
+        qrcode: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zm4 4h3v3h-3zm0-4h3m-7 7h3"/></svg>',
+      };
+      return `
+        <a href="${page.href}" class="mobile-nav-item ${active ? "active" : ""} ${center ? "mobile-nav-center" : ""}"
+           aria-current="${active ? "page" : "false"}" aria-label="${page.label}">
+          <span class="mnav-icon">${icons[page.id]}</span>
+          <span>${page.labelShort}</span>
+        </a>`;
+    }).join("");
+    const nav = document.createElement("nav");
+    nav.id = "mobile-navbar";
+    nav.className = "mobile-navbar";
+    nav.setAttribute("aria-label", "Navigasi utama");
+    nav.innerHTML = mobileItems;
+    document.body.appendChild(nav);
+  }
+
+  const themeButton = document.querySelector('[data-action="toggle-theme"]');
+  if (themeButton) {
+    themeButton.textContent = document.documentElement.getAttribute("data-theme") === "light" ? "☾" : "☼";
+    themeButton.onclick = toggleTheme;
+  }
+
+  const installButton = document.querySelector('[data-action="install-app"]');
+  if (installButton) {
+    installButton.onclick = installApp;
+    updateInstallButton();
+  }
+}
+
+let installPromptEvent = null;
+function isAppInstalled() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function updateInstallButton() {
+  const button = document.querySelector(".install-app-button");
+  if (button) button.hidden = isAppInstalled();
+}
+
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  installPromptEvent = event;
+  updateInstallButton();
+});
+
+window.addEventListener("appinstalled", () => {
+  installPromptEvent = null;
+  updateInstallButton();
+});
+
+async function installApp() {
+  if (isAppInstalled()) {
+    updateInstallButton();
+    return;
+  }
+  if (!installPromptEvent) {
+    showToast("Buka menu browser, lalu pilih “Tambahkan ke layar utama”.", "info");
+    return;
+  }
+
+  try {
+    await installPromptEvent.prompt();
+  } catch (error) {
+    console.warn("[UI] Instalasi aplikasi gagal:", error);
+    showToast("Instalasi gagal. Coba lagi melalui menu browser.", "error");
+  }
+  installPromptEvent = null;
+  updateInstallButton();
+}
+
+function toggleTheme() {
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  const mode = isLight ? "dark" : "light";
+  if (mode === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  let settings = {};
+  try {
+    settings = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || "{}");
+  } catch (error) {
+    console.warn("[UI] Preferensi tema tidak dapat dibaca:", error);
+  }
+  settings.darkMode = mode;
+  localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+  const button = document.querySelector('[data-action="toggle-theme"]');
+  if (button) button.textContent = mode === "light" ? "☾" : "☼";
+}
+
+/**
+ * Tampilkan notifikasi sementara.
+ * @param {string} msg
+ * @param {'success'|'error'|'info'} [type='success']
+ */
+function showToast(msg, type = "success") {
+  let toast = document.getElementById("toast-notification");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast-notification";
+    toast.className = "toast-notification";
+    toast.setAttribute("role", "alert");
+    toast.setAttribute("aria-live", "polite");
+    document.body.appendChild(toast);
+  }
+
+  const status = type === "error" || type === "info" ? type : "success";
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = status === "success" ? "✓" : status === "error" ? "!" : "i";
+  const message = document.createElement("span");
+  message.textContent = msg;
+  toast.replaceChildren(icon, message);
+  toast.classList.toggle("success", status === "success");
+  toast.classList.toggle("error", status === "error");
+  toast.classList.toggle("info", status === "info");
+  toast.classList.add("is-visible");
+
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.classList.remove("is-visible"); }, 3200);
+}
+
+/**
+ * Terapkan preferensi tampilan yang tersimpan di browser.
+ */
+function applyGlobalSettings() {
+  let settings = {};
+  try {
+    settings = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || "{}");
+  } catch (error) {
+    console.warn("[UI] Preferensi aplikasi tidak dapat dibaca:", error);
+  }
+
+  if (settings.accent) {
+    document.documentElement.style.setProperty("--accent", settings.accent);
+    document.documentElement.style.setProperty("--accent-glow", hexToRgba(settings.accent, 0.28));
+  }
+  if (settings.fontSize) {
+    document.documentElement.style.fontSize = settings.fontSize + "px";
+  }
+  document.documentElement.style.setProperty(
+    "--transition",
+    settings.anim === false ? "0s" : "0.18s cubic-bezier(0.4,0,0.2,1)"
+  );
+  if (settings.darkMode === "light") {
+    document.documentElement.setAttribute("data-theme", "light");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  const themeButton = document.querySelector('[data-action="toggle-theme"]');
+  if (themeButton) themeButton.textContent = settings.darkMode === "light" ? "☾" : "☼";
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+(function initPageTransition() {
+  document.addEventListener("DOMContentLoaded", () => {
+    const main = document.querySelector(".main-content");
+    if (main) main.classList.add("page-fade-in");
+  });
+
+  document.addEventListener("click", event => {
+    const link = event.target.closest("a.mobile-nav-item");
+    if (!link) return;
+
+    const href = link.getAttribute("href");
+    if (!href || href === "#" || href.startsWith("http")) return;
+    if (window.location.pathname === new URL(href, window.location.href).pathname) return;
+
+    event.preventDefault();
+    const main = document.querySelector(".main-content");
+    if (main) {
+      main.style.transition = "opacity 0.18s ease, transform 0.18s ease";
+      main.style.opacity = "0";
+      main.style.transform = "translateY(8px)";
+    }
+
+    const sidebar = document.querySelector(".sidebar");
+    if (sidebar) {
+      sidebar.style.transition = "opacity 0.18s ease";
+      sidebar.style.opacity = "0.6";
+    }
+    setTimeout(() => { window.location.href = href; }, 180);
+  });
+})();
+
+// ===== Batch processor =====
+
+(function () {
+
+  // ── State ───────────────────────────────────────────────
+  let batchFiles   = [];
+  let batchMode    = "compress"; // compress | resize | convert
+  let batchRunning = false;
+
+  // ── Style ───────────────────────────────────────────────
+  function injectStyles() {
+    if (document.getElementById("batch-style")) return;
+    const s = document.createElement("style");
+    s.id = "batch-style";
+    s.textContent = `
+      #batch-modal-overlay {
+        position: fixed; inset: 0; z-index: 99996;
+        background: rgba(8,8,15,0.80);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px; opacity: 0; visibility: hidden;
+        transition: opacity 0.25s ease, visibility 0.25s ease;
+      }
+      #batch-modal-overlay.show { opacity: 1; visibility: visible; }
+
+      #batch-modal-card {
+        background: #13132a;
+        border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 20px;
+        padding: 28px 28px 24px;
+        width: 100%; max-width: 560px;
+        max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 32px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,106,255,0.12);
+        transform: scale(0.92) translateY(16px);
+        transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+        position: relative;
+      }
+      #batch-modal-overlay.show #batch-modal-card {
+        transform: scale(1) translateY(0);
+      }
+      #batch-modal-card::before {
+        content: '';
+        position: absolute; top: -1px; left: 20%; right: 20%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(124,106,255,0.6), transparent);
+      }
+
+      .batch-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .batch-title {
+        font-family: var(--font-head, 'Syne', sans-serif);
+        font-size: 18px; font-weight: 700; color: var(--text, #eeedf8);
+        letter-spacing: -0.02em;
+      }
+      .batch-close {
+        background: none; border: none; color: var(--text3, #4a4962);
+        font-size: 18px; cursor: pointer; padding: 4px 8px;
+        border-radius: 6px; transition: all 0.18s ease;
+      }
+      .batch-close:hover { color: var(--text, #eeedf8); background: rgba(255,255,255,0.06); }
+
+      /* Mode tabs */
+      .batch-mode-tabs {
+        display: flex; gap: 6px; margin-bottom: 20px;
+        background: var(--bg3, #16162a);
+        border: 1px solid var(--border, rgba(255,255,255,0.07));
+        border-radius: 10px; padding: 4px;
+      }
+      .batch-mode-tab {
+        flex: 1; padding: 8px 0; border: none; border-radius: 7px;
+        background: transparent; color: var(--text2, #8887a4);
+        font-family: var(--font-body, sans-serif); font-size: 13px; font-weight: 500;
+        cursor: pointer; transition: all 0.18s ease; text-align: center;
+      }
+      .batch-mode-tab.active {
+        background: var(--surface, #1c1c30); color: var(--text, #eeedf8);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      }
+
+      /* Upload zone batch */
+      .batch-upload-zone {
+        border: 2px dashed var(--border2, rgba(255,255,255,0.13));
+        border-radius: 12px; padding: 28px 20px; text-align: center;
+        cursor: pointer; transition: all 0.18s ease; margin-bottom: 16px;
+      }
+      .batch-upload-zone:hover, .batch-upload-zone.drag-over {
+        border-color: var(--accent, #7c6aff);
+        background: rgba(124,106,255,0.05);
+      }
+      .batch-upload-zone p { font-size: 13px; color: var(--text2, #8887a4); margin-top: 6px; }
+      .batch-upload-zone strong { color: var(--text, #eeedf8); font-size: 14px; }
+
+      /* Options */
+      .batch-option-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 0; border-bottom: 1px solid var(--border, rgba(255,255,255,0.07));
+        gap: 12px; flex-wrap: wrap;
+      }
+      .batch-option-row:last-of-type { border: none; }
+      .batch-opt-label { font-size: 13px; font-weight: 500; color: var(--text, #eeedf8); }
+      .batch-opt-desc  { font-size: 11px; color: var(--text2, #8887a4); margin-top: 2px; }
+
+      /* File queue list */
+      .batch-file-queue {
+        display: flex; flex-direction: column; gap: 6px;
+        max-height: 200px; overflow-y: auto;
+        margin-bottom: 16px; padding-right: 2px;
+      }
+      .batch-file-item {
+        display: flex; align-items: center; gap: 10px;
+        background: var(--bg3, #16162a);
+        border: 1px solid var(--border, rgba(255,255,255,0.07));
+        border-radius: 8px; padding: 8px 12px;
+        transition: border-color 0.18s ease;
+      }
+      .batch-file-item.done    { border-color: rgba(0,212,168,0.3); }
+      .batch-file-item.failed  { border-color: rgba(255,107,107,0.3); }
+      .batch-file-item.running { border-color: rgba(124,106,255,0.3); }
+      .bfi-icon { font-size: 16px; flex-shrink: 0; }
+      .bfi-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--text, #eeedf8);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .bfi-size { font-size: 11px; color: var(--text3, #4a4962); flex-shrink: 0; }
+      .bfi-status { font-size: 11px; flex-shrink: 0; min-width: 56px; text-align: right; }
+      .bfi-del {
+        background: none; border: none; color: var(--text3, #4a4962);
+        cursor: pointer; font-size: 13px; padding: 2px 4px; flex-shrink: 0;
+      }
+      .bfi-del:hover { color: var(--danger, #ff6b6b); }
+
+      /* Progress overall */
+      .batch-overall-progress {
+        margin-bottom: 16px; display: none;
+      }
+      .batch-overall-bar {
+        height: 6px; background: var(--surface2, #22223a);
+        border-radius: 6px; overflow: hidden; margin-bottom: 6px;
+      }
+      .batch-overall-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent, #7c6aff), var(--teal, #00d4a8));
+        border-radius: 6px;
+        transition: width 0.3s ease;
+        width: 0%;
+      }
+      .batch-overall-text {
+        font-size: 12px; color: var(--text2, #8887a4); text-align: center;
+      }
+
+      /* Actions */
+      .batch-actions { display: flex; gap: 10px; margin-top: 4px; }
+      .batch-btn-cancel {
+        padding: 10px 18px; border-radius: 9px;
+        border: 1px solid rgba(255,255,255,0.10);
+        background: transparent; color: var(--text2, #8887a4);
+        font-family: var(--font-body, sans-serif); font-size: 13.5px; font-weight: 500;
+        cursor: pointer; transition: all 0.18s ease;
+      }
+      .batch-btn-cancel:hover { background: rgba(255,255,255,0.06); color: var(--text, #eeedf8); }
+      .batch-btn-run {
+        flex: 1; padding: 10px 18px; border-radius: 9px; border: none;
+        background: var(--accent, #7c6aff); color: #fff;
+        font-family: var(--font-body, sans-serif); font-size: 13.5px; font-weight: 600;
+        cursor: pointer; transition: all 0.2s ease;
+        box-shadow: 0 4px 16px rgba(124,106,255,0.3);
+      }
+      .batch-btn-run:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+      .batch-btn-run:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+      /* Download all button */
+      .batch-btn-dl-all {
+        width: 100%; padding: 10px; border-radius: 9px; border: none;
+        background: rgba(0,212,168,0.12);
+        border: 1px solid rgba(0,212,168,0.25);
+        color: var(--teal, #00d4a8);
+        font-family: var(--font-body, sans-serif); font-size: 13.5px; font-weight: 600;
+        cursor: pointer; margin-top: 10px; transition: all 0.18s ease; display: none;
+      }
+      .batch-btn-dl-all:hover { background: rgba(0,212,168,0.2); }
+      .batch-btn-dl-all.show { display: block; }
+
+      /* Trigger button di halaman converter */
+      .batch-trigger-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 9px 16px; border-radius: 9px;
+        border: 1px solid var(--border2, rgba(255,255,255,0.13));
+        background: var(--surface, #1c1c30); color: var(--text2, #8887a4);
+        font-family: var(--font-body, sans-serif); font-size: 13px; font-weight: 500;
+        cursor: pointer; transition: all 0.18s ease; white-space: nowrap;
+      }
+      .batch-trigger-btn:hover {
+        border-color: var(--accent, #7c6aff); color: var(--accent2, #b8abff);
+        background: rgba(124,106,255,0.07);
+      }
+
+      @media (max-width: 600px) {
+        #batch-modal-card { padding: 20px 16px 18px; border-radius: 16px; }
+        .batch-title { font-size: 16px; }
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  // ── HTML modal ───────────────────────────────────────────
+  function injectModal() {
+    if (document.getElementById("batch-modal-overlay")) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "batch-modal-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.innerHTML = `
+      <div id="batch-modal-card">
+        <div class="batch-header">
+          <h2 class="batch-title">⚡ Batch Processing</h2>
+          <button class="batch-close" onclick="window.batchClose()" aria-label="Tutup">✕</button>
+        </div>
+
+        <!-- Mode tabs -->
+        <div class="batch-mode-tabs">
+          <button class="batch-mode-tab active" data-mode="compress" onclick="window.batchSetMode('compress',this)">🗜 Kompres</button>
+          <button class="batch-mode-tab" data-mode="resize" onclick="window.batchSetMode('resize',this)">📐 Resize</button>
+          <button class="batch-mode-tab" data-mode="convert" onclick="window.batchSetMode('convert',this)">🔁 Konversi</button>
+          <button class="batch-mode-tab" data-mode="grayscale" onclick="window.batchSetMode('grayscale',this)">🎨 Abu-abu</button>
+        </div>
+
+        <!-- Upload zone -->
+        <div class="batch-upload-zone" id="batch-upload-zone"
+          onclick="document.getElementById('batch-file-input').click()">
+          <div style="font-size:28px;margin-bottom:6px">🖼</div>
+          <strong>Klik atau seret gambar ke sini</strong>
+          <p>JPG, PNG, WEBP — bisa banyak sekaligus</p>
+          <input type="file" id="batch-file-input" accept="image/*" multiple style="display:none"
+            onchange="window.batchAddFiles(this.files)" />
+        </div>
+
+        <!-- Options per mode -->
+        <div id="batch-options"></div>
+
+        <!-- File queue -->
+        <div class="batch-file-queue" id="batch-file-queue" style="display:none"></div>
+
+        <!-- Overall progress -->
+        <div class="batch-overall-progress" id="batch-overall-progress">
+          <div class="batch-overall-bar">
+            <div class="batch-overall-fill" id="batch-overall-fill"></div>
+          </div>
+          <p class="batch-overall-text" id="batch-overall-text">0 / 0 file selesai</p>
+        </div>
+
+        <!-- Actions -->
+        <div class="batch-actions">
+          <button class="batch-btn-cancel" onclick="window.batchClose()">Batal</button>
+          <button class="batch-btn-run" id="batch-btn-run" disabled onclick="window.batchRun()">
+            ⚡ Proses Semua
+          </button>
+        </div>
+
+        <button class="batch-btn-dl-all" id="batch-btn-dl-all" onclick="window.batchDownloadAll()">
+          ⬇ Unduh Semua File (ZIP)
+        </button>
+      </div>
+    `;
+
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) window.batchClose(); });
+    document.body.appendChild(overlay);
+
+    // Init drag drop untuk batch upload zone
+    const bz = document.getElementById("batch-upload-zone");
+    bz.addEventListener("dragover",  e => { e.preventDefault(); bz.classList.add("drag-over"); });
+    bz.addEventListener("dragleave", () => bz.classList.remove("drag-over"));
+    bz.addEventListener("drop", e => {
+      e.preventDefault(); bz.classList.remove("drag-over");
+      window.batchAddFiles(e.dataTransfer.files);
+    });
+
+    renderBatchOptions();
+  }
+
+  // ── Options HTML per mode ────────────────────────────────
+  const BATCH_OPTIONS_HTML = {
+    compress: `
+      <div class="batch-option-row">
+        <div><p class="batch-opt-label">Kualitas: <span id="b-quality-val">75</span>%</p>
+        <p class="batch-opt-desc">Berlaku untuk semua file</p></div>
+        <input type="range" id="b-quality" min="10" max="95" value="75" class="slider" style="width:120px"
+          oninput="document.getElementById('b-quality-val').textContent=this.value" />
+      </div>
+      <div class="batch-option-row">
+        <div><p class="batch-opt-label">Format output</p></div>
+        <div class="format-pills">
+          <label class="format-pill"><input type="radio" name="b-fmt" value="same" checked /> Sama</label>
+          <label class="format-pill"><input type="radio" name="b-fmt" value="image/jpeg" /> JPG</label>
+          <label class="format-pill"><input type="radio" name="b-fmt" value="image/webp" /> WEBP</label>
+        </div>
+      </div>`,
+
+    resize: `
+      <div class="batch-option-row">
+        <div><p class="batch-opt-label">Lebar maksimum (px)</p>
+        <p class="batch-opt-desc">Tinggi menyesuaikan rasio otomatis</p></div>
+        <input type="number" id="b-max-w" class="form-input" value="1280"
+          min="100" max="9999" style="max-width:90px" />
+      </div>
+      <div class="batch-option-row">
+        <div><p class="batch-opt-label">Hanya perkecil</p>
+        <p class="batch-opt-desc">Gambar yang sudah lebih kecil tidak diubah</p></div>
+        <label class="toggle"><input type="checkbox" id="b-only-shrink" checked /><span class="toggle-track"></span></label>
+      </div>`,
+
+    convert: `
+      <div class="batch-option-row">
+        <div><p class="batch-opt-label">Konversi ke format</p></div>
+        <div class="format-pills">
+          <label class="format-pill"><input type="radio" name="b-conv-fmt" value="image/png" checked /> PNG</label>
+          <label class="format-pill"><input type="radio" name="b-conv-fmt" value="image/jpeg" /> JPG</label>
+          <label class="format-pill"><input type="radio" name="b-conv-fmt" value="image/webp" /> WEBP</label>
+        </div>
+      </div>`,
+
+    grayscale: `
+      <div class="batch-option-row" style="border:none">
+        <div><p class="batch-opt-label">Semua gambar diubah ke hitam putih</p>
+        <p class="batch-opt-desc">Format output sama dengan file asli</p></div>
+        <span style="font-size:20px">🎨</span>
+      </div>`,
+  };
+
+  function renderBatchOptions() {
+    const el = document.getElementById("batch-options");
+    if (el) el.innerHTML = BATCH_OPTIONS_HTML[batchMode] || "";
+  }
+
+  // ── Tambah file ke antrian ───────────────────────────────
+  window.batchAddFiles = function(fileList) {
+    const existing = new Set(batchFiles.map(f => f.name + f.size));
+    for (const f of fileList) {
+      if (!f.type.startsWith("image/")) continue;
+      if (existing.has(f.name + f.size)) continue;
+      batchFiles.push(f);
+    }
+    renderBatchQueue();
+  };
+
+  function renderBatchQueue() {
+    const el = document.getElementById("batch-file-queue");
+    const btn = document.getElementById("batch-btn-run");
+    if (!el) return;
+
+    if (!batchFiles.length) {
+      el.style.display = "none";
+      if (btn) btn.disabled = true;
+      return;
+    }
+
+    el.style.display = "flex";
+    el.innerHTML = batchFiles.map((f, i) => `
+      <div class="batch-file-item" id="bfi-${i}">
+        <span class="bfi-icon">🖼</span>
+        <span class="bfi-name">${escHtml(f.name)}</span>
+        <span class="bfi-size">${fmtSizeB(f.size)}</span>
+        <span class="bfi-status" id="bfi-status-${i}" style="color:var(--text3)">Menunggu</span>
+        <button class="bfi-del" onclick="window.batchRemoveFile(${i})" ${batchRunning ? "disabled" : ""}>✕</button>
+      </div>`).join("");
+
+    if (btn) btn.disabled = batchRunning || batchFiles.length === 0;
+  }
+
+  window.batchRemoveFile = function(i) {
+    batchFiles.splice(i, 1);
+    renderBatchQueue();
+  };
+
+  // ── Set mode ─────────────────────────────────────────────
+  window.batchSetMode = function(mode, btn) {
+    batchMode = mode;
+    document.querySelectorAll(".batch-mode-tab").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    renderBatchOptions();
+  };
+
+  // ── Jalankan batch ───────────────────────────────────────
+  window.batchRun = async function() {
+    if (!batchFiles.length || batchRunning) return;
+    batchRunning = true;
+
+    const runBtn = document.getElementById("batch-btn-run");
+    if (runBtn) { runBtn.disabled = true; runBtn.textContent = "⏳ Memproses..."; }
+
+    const progressWrap = document.getElementById("batch-overall-progress");
+    const progressFill = document.getElementById("batch-overall-fill");
+    const progressText = document.getElementById("batch-overall-text");
+    if (progressWrap) progressWrap.style.display = "block";
+
+    window._batchResults = [];
+    let done = 0;
+
+    for (let i = 0; i < batchFiles.length; i++) {
+      const f    = batchFiles[i];
+      const item = document.getElementById(`bfi-${i}`);
+      const stat = document.getElementById(`bfi-status-${i}`);
+
+      if (item) item.classList.add("running");
+      if (stat) { stat.textContent = "Memproses..."; stat.style.color = "var(--accent2)"; }
+
+      try {
+        const result = await processBatchFile(f);
+        window._batchResults.push({ blob: result.blob, filename: result.filename });
+
+        if (item) item.classList.replace("running", "done");
+        if (stat) {
+          const saved = f.size > result.blob.size
+            ? ` (-${Math.round((1 - result.blob.size/f.size)*100)}%)`
+            : "";
+          stat.textContent = "✓" + saved;
+          stat.style.color = "var(--success)";
+        }
+      } catch(e) {
+        if (item) item.classList.replace("running", "failed");
+        if (stat) { stat.textContent = "✗ Gagal"; stat.style.color = "var(--danger)"; }
+      }
+
+      done++;
+      const pct = Math.round((done / batchFiles.length) * 100);
+      if (progressFill) progressFill.style.width = pct + "%";
+      if (progressText) progressText.textContent  = `${done} / ${batchFiles.length} file selesai`;
+    }
+
+    batchRunning = false;
+    if (runBtn) { runBtn.textContent = "✓ Selesai"; }
+
+    const dlAllBtn = document.getElementById("batch-btn-dl-all");
+    if (dlAllBtn && window._batchResults.length > 0) dlAllBtn.classList.add("show");
+
+    if (typeof showToast === "function") {
+      showToast(`${window._batchResults.length} file berhasil diproses ✓`);
+    }
+  };
+
+  // ── Proses 1 file sesuai mode aktif ─────────────────────
+  async function processBatchFile(file) {
+    const canvas = document.createElement("canvas");
+    const bm     = await createImageBitmap(file);
+    let w = bm.width, h = bm.height;
+    let mime = file.type;
+    let ext  = file.name.split(".").pop().toLowerCase();
+    let suffix = "";
+
+    if (batchMode === "compress") {
+      const quality  = parseInt(document.getElementById("b-quality")?.value || 75) / 100;
+      const fmtRadio = document.querySelector('input[name="b-fmt"]:checked');
+      const fmt      = fmtRadio?.value || "same";
+      if (fmt !== "same") { mime = fmt; ext = fmt === "image/jpeg" ? "jpg" : "webp"; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(bm, 0, 0);
+      suffix = "_kompres";
+      const blob = await new Promise(res => canvas.toBlob(res, mime === file.type ? "image/jpeg" : mime, quality));
+      return { blob, filename: file.name.replace(/\.[^.]+$/, "") + suffix + "." + ext };
+    }
+
+    if (batchMode === "resize") {
+      const maxW      = parseInt(document.getElementById("b-max-w")?.value || 1280);
+      const onlyShrink = document.getElementById("b-only-shrink")?.checked ?? true;
+      if (!onlyShrink || w > maxW) {
+        h = Math.round(h * (maxW / w));
+        w = maxW;
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(bm, 0, 0, w, h);
+      suffix = `_${w}x${h}`;
+      const blob = await new Promise(res => canvas.toBlob(res, mime, 0.92));
+      return { blob, filename: file.name.replace(/\.[^.]+$/, "") + suffix + "." + ext };
+    }
+
+    if (batchMode === "convert") {
+      const fmtRadio = document.querySelector('input[name="b-conv-fmt"]:checked');
+      mime = fmtRadio?.value || "image/png";
+      ext  = mime === "image/jpeg" ? "jpg" : mime.split("/")[1];
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(bm, 0, 0);
+      const blob = await new Promise(res => canvas.toBlob(res, mime, 0.93));
+      return { blob, filename: file.name.replace(/\.[^.]+$/, "") + "." + ext };
+    }
+
+    if (batchMode === "grayscale") {
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.filter = "grayscale(1)";
+      ctx.drawImage(bm, 0, 0);
+      const blob = await new Promise(res => canvas.toBlob(res, mime, 0.93));
+      return { blob, filename: file.name.replace(/\.[^.]+$/, "") + "_abuabu." + ext };
+    }
+
+    throw new Error("Mode tidak dikenal");
+  }
+
+  // ── Download semua sebagai ZIP ───────────────────────────
+  window.batchDownloadAll = async function() {
+    const results = window._batchResults || [];
+    if (!results.length) return;
+
+    // Kalau hanya 1 file, langsung download tanpa ZIP
+    if (results.length === 1) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(results[0].blob);
+      a.download = results[0].filename;
+      a.click();
+      return;
+    }
+
+    // Buat ZIP sederhana manual (tanpa library eksternal)
+    // Gunakan JSZip kalau tersedia, fallback ke download satu per satu
+    if (window.JSZip) {
+      const zip = new JSZip();
+      results.forEach(r => zip.file(r.filename, r.blob));
+      const content = await zip.generateAsync({ type:"blob", compression:"DEFLATE", compressionOptions:{ level:6 } });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(content);
+      a.download = `batch_${Date.now()}.zip`;
+      a.click();
+      if (typeof showToast === "function") showToast("ZIP berhasil diunduh ✓");
+    } else {
+      // Fallback: download satu per satu dengan delay
+      if (typeof showToast === "function") showToast("Mengunduh " + results.length + " file...");
+      for (let i = 0; i < results.length; i++) {
+        await new Promise(res => setTimeout(res, i * 300));
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(results[i].blob);
+        a.download = results[i].filename;
+        a.click();
+      }
+    }
+  };
+
+  // ── Open / close ─────────────────────────────────────────
+  window.batchOpen = function() {
+    batchFiles   = [];
+    batchRunning = false;
+    window._batchResults = [];
+
+    injectStyles();
+    injectModal();
+
+    const overlay = document.getElementById("batch-modal-overlay");
+    if (!overlay) return;
+
+    // Reset state UI
+    renderBatchQueue();
+    renderBatchOptions();
+    const progressWrap = document.getElementById("batch-overall-progress");
+    if (progressWrap) progressWrap.style.display = "none";
+    const dlAllBtn = document.getElementById("batch-btn-dl-all");
+    if (dlAllBtn) dlAllBtn.classList.remove("show");
+    const runBtn = document.getElementById("batch-btn-run");
+    if (runBtn) { runBtn.disabled = true; runBtn.textContent = "⚡ Proses Semua"; }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        overlay.classList.add("show");
+        document.body.style.overflow = "hidden";
+      });
+    });
+  };
+
+  window.batchClose = function() {
+    const overlay = document.getElementById("batch-modal-overlay");
+    if (!overlay) return;
+    overlay.classList.remove("show");
+    document.body.style.overflow = "";
+  };
+
+  // ── Keyboard ─────────────────────────────────────────────
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const overlay = document.getElementById("batch-modal-overlay");
+      if (overlay?.classList.contains("show")) window.batchClose();
+    }
+  });
+
+  // ── Utilitas lokal ───────────────────────────────────────
+  function fmtSizeB(b) {
+    if (b < 1024)    return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+    return (b / 1048576).toFixed(2) + " MB";
+  }
+  function escHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+})();
+
+// ===== Riwayat converter =====
+
+(function () {
+
+  const HISTORY_KEY = STORAGE_KEYS.CONVERTER_HISTORY;
+  const MAX_HISTORY = 20;
+
+  // ── Style ───────────────────────────────────────────────
+  function injectStyles() {
+    if (document.getElementById("conv-history-style")) return;
+    const s = document.createElement("style");
+    s.id = "conv-history-style";
+    s.textContent = `
+      /* Panel riwayat — muncul di bawah tool grid */
+      #conv-history-panel {
+        margin-top: 32px;
+        display: none;
+      }
+      #conv-history-panel.show { display: block; }
+
+      .conv-history-header {
+        display: flex; align-items: center;
+        justify-content: space-between; margin-bottom: 12px;
+      }
+      .conv-history-title {
+        font-family: var(--font-head, 'Syne', sans-serif);
+        font-size: 15px; font-weight: 700; color: var(--text, #eeedf8);
+      }
+
+      .conv-history-list {
+        display: flex; flex-direction: column; gap: 8px;
+      }
+
+      .conv-history-item {
+        display: flex; align-items: center; gap: 12px;
+        background: var(--surface, #1c1c30);
+        border: 1px solid var(--border, rgba(255,255,255,0.07));
+        border-radius: var(--radius-sm, 9px); padding: 12px 14px;
+        transition: border-color 0.18s ease, background 0.18s ease;
+        animation: fileItemIn 0.22s ease both;
+      }
+      .conv-history-item:hover {
+        border-color: var(--border2, rgba(255,255,255,0.13));
+        background: var(--surface2, #22223a);
+      }
+
+      .chi-icon {
+        font-size: 20px; flex-shrink: 0;
+        width: 38px; height: 38px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--bg3, #16162a);
+        border: 1px solid var(--border2, rgba(255,255,255,0.13));
+        border-radius: 8px;
+      }
+      .chi-body { flex: 1; min-width: 0; }
+      .chi-tool {
+        font-size: 13px; font-weight: 600; color: var(--text, #eeedf8);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .chi-meta {
+        font-size: 11px; color: var(--text3, #4a4962); margin-top: 2px;
+        display: flex; gap: 8px; flex-wrap: wrap;
+      }
+      .chi-meta span { display: flex; align-items: center; gap: 3px; }
+      .chi-badge {
+        font-size: 10px; font-weight: 600; flex-shrink: 0;
+        padding: 2px 8px; border-radius: 20px;
+      }
+      .chi-badge-pdf    { background: rgba(255,107,107,0.12); color: #ff8e8e; }
+      .chi-badge-image  { background: rgba(124,106,255,0.12); color: var(--accent2, #b8abff); }
+      .chi-badge-doc    { background: rgba(0,212,168,0.10);   color: var(--teal, #00d4a8); }
+      .chi-open {
+        background: none; border: 1px solid var(--border2, rgba(255,255,255,0.13));
+        border-radius: 7px; color: var(--text2, #8887a4);
+        font-family: var(--font-body, sans-serif); font-size: 11.5px; font-weight: 500;
+        padding: 5px 10px; cursor: pointer; flex-shrink: 0;
+        transition: all 0.18s ease; white-space: nowrap;
+      }
+      .chi-open:hover {
+        border-color: var(--accent, #7c6aff); color: var(--accent2, #b8abff);
+        background: rgba(124,106,255,0.07);
+      }
+      .chi-del {
+        background: none; border: none; color: var(--text3, #4a4962);
+        font-size: 13px; cursor: pointer; padding: 4px 6px; flex-shrink: 0;
+      }
+      .chi-del:hover { color: var(--danger, #ff6b6b); }
+
+      /* Toggle tombol riwayat */
+      .conv-history-toggle {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 12.5px; color: var(--text2, #8887a4);
+        background: none; border: none; cursor: pointer;
+        padding: 0; font-family: var(--font-body, sans-serif);
+        transition: color 0.18s ease;
+      }
+      .conv-history-toggle:hover { color: var(--accent2, #b8abff); }
+
+      .conv-history-empty {
+        text-align: center; padding: 32px 0;
+        color: var(--text3, #4a4962); font-size: 13px;
+      }
+      .conv-history-empty-icon {
+        font-size: 32px; margin-bottom: 8px; opacity: 0.5;
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  // ── Load & save history ──────────────────────────────────
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); }
+    catch(_) { return []; }
+  }
+
+  function saveHistory(history) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch(_) {}
+  }
+
+  // ── Tambah entri ─────────────────────────────────────────
+  window.convHistoryAdd = function(toolId, toolTitle, toolIcon, inputFiles, outputDesc) {
+    const history = loadHistory();
+    const pdfTools   = ["merge","split","rotate","deletepages","compresspdf","passwordpdf","pdf2txt","img2pdf","pdf2img"];
+    const imageTools = ["imgconvert","compress","resize","crop","rotate_img","adjust","grayscale","exif","base64img","ascii"];
+    let cat = "doc";
+    if (pdfTools.includes(toolId))   cat = "pdf";
+    if (imageTools.includes(toolId)) cat = "image";
+
+    const entry = {
+      id:       Date.now(),
+      toolId,
+      tool:     toolTitle,
+      icon:     toolIcon,
+      cat,
+      files:    inputFiles.map(f => ({ name: f.name, size: f.size })),
+      output:   outputDesc,
+      time:     Date.now(),
+    };
+
+    history.unshift(entry);
+    if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
+    saveHistory(history);
+    renderHistoryPanel();
+  };
+
+  // ── Render panel ─────────────────────────────────────────
+  function renderHistoryPanel() {
+    const panel = document.getElementById("conv-history-panel");
+    if (!panel) return;
+
+    const history = loadHistory();
+
+    if (!history.length) {
+      panel.classList.remove("show");
+      return;
+    }
+
+    panel.classList.add("show");
+
+    const badgeClass = { pdf:"chi-badge-pdf", image:"chi-badge-image", doc:"chi-badge-doc" };
+    const badgeLabel = { pdf:"PDF", image:"Gambar", doc:"Dokumen" };
+
+    const list = history.map(item => `
+      <div class="conv-history-item" id="chi-${item.id}">
+        <div class="chi-icon">${item.icon}</div>
+        <div class="chi-body">
+          <p class="chi-tool">${escHtml(item.tool)}</p>
+          <div class="chi-meta">
+            <span>🕐 ${timeAgo(item.time)}</span>
+            <span>📁 ${item.files.length} file</span>
+            ${item.output ? `<span>→ ${escHtml(item.output)}</span>` : ""}
+          </div>
+        </div>
+        <span class="chi-badge ${badgeClass[item.cat] || "chi-badge-doc"}">${badgeLabel[item.cat] || "Tool"}</span>
+        <button class="chi-open" onclick="window.convHistoryReopen('${item.toolId}')">Buka Tool →</button>
+        <button class="chi-del" onclick="window.convHistoryDelete(${item.id})" aria-label="Hapus">✕</button>
+      </div>`).join("");
+
+    const listEl = document.getElementById("conv-history-list");
+    if (listEl) listEl.innerHTML = list;
+  }
+
+  // ── Reopen tool dari history ─────────────────────────────
+  window.convHistoryReopen = function(toolId) {
+    if (typeof openTool === "function") {
+      openTool(toolId);
+      if (typeof showToast === "function") showToast("Tool dibuka — unggah file baru untuk memproses");
+    }
+  };
+
+  // ── Hapus entri ──────────────────────────────────────────
+  window.convHistoryDelete = function(id) {
+    let history = loadHistory();
+    history = history.filter(h => h.id !== id);
+    saveHistory(history);
+    const el = document.getElementById("chi-" + id);
+    if (el) {
+      el.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+      el.style.opacity = "0";
+      el.style.transform = "translateX(12px)";
+      setTimeout(() => renderHistoryPanel(), 220);
+    }
+  };
+
+  // ── Hapus semua ──────────────────────────────────────────
+  window.convHistoryClear = function() {
+    if (!confirm("Hapus semua riwayat konversi?")) return;
+    localStorage.removeItem(HISTORY_KEY);
+    renderHistoryPanel();
+    if (typeof showToast === "function") showToast("Riwayat dihapus ✓");
+  };
+
+  // ── Inject panel ke halaman converter ───────────────────
+  function injectPanel() {
+    // Cari elemen tool-grid-section untuk append panel di bawahnya
+    const gridSection = document.getElementById("tool-grid-section");
+    if (!gridSection || document.getElementById("conv-history-panel")) return;
+
+    const panel = document.createElement("div");
+    panel.id = "conv-history-panel";
+    panel.innerHTML = `
+      <div class="conv-history-header">
+        <h3 class="conv-history-title">🕐 Riwayat Konversi</h3>
+        <button class="btn btn-secondary" onclick="window.convHistoryClear()"
+          style="font-size:11px;padding:4px 10px">Hapus Semua</button>
+      </div>
+      <div class="conv-history-list" id="conv-history-list"></div>
+    `;
+    gridSection.appendChild(panel);
+    renderHistoryPanel();
+  }
+
+  // ── Utilitas ─────────────────────────────────────────────
+  function timeAgo(ts) {
+    const diff = Date.now() - ts;
+    const m = Math.floor(diff / 60000);
+    const h = Math.floor(diff / 3600000);
+    const d = Math.floor(diff / 86400000);
+    if (m < 1)  return "Baru saja";
+    if (m < 60) return m + " menit lalu";
+    if (h < 24) return h + " jam lalu";
+    if (d < 7)  return d + " hari lalu";
+    return new Date(ts).toLocaleDateString("id-ID", { day:"numeric", month:"short" });
+  }
+  function escHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  // ── Init ─────────────────────────────────────────────────
+  function init() {
+    injectStyles();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", injectPanel);
+    } else {
+      setTimeout(injectPanel, 100);
+    }
+  }
+
+  init();
+
+})();
+
+// ===== SVG optimizer =====
+// Tool SVG Optimizer and its dynamically added card.
+
+(function () {
+
+  // ── Style ───────────────────────────────────────────────
+  function injectStyles() {
+    if (document.getElementById("svg-opt-style")) return;
+    const s = document.createElement("style");
+    s.id = "svg-opt-style";
+    s.textContent = `
+      #svg-opt-overlay {
+        position: fixed; inset: 0; z-index: 99995;
+        background: rgba(8,8,15,0.80);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px; opacity: 0; visibility: hidden;
+        transition: opacity 0.25s ease, visibility 0.25s ease;
+      }
+      #svg-opt-overlay.show { opacity: 1; visibility: visible; }
+
+      #svg-opt-card {
+        background: #13132a;
+        border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 20px; padding: 28px;
+        width: 100%; max-width: 620px;
+        max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 32px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,106,255,0.12);
+        transform: scale(0.92) translateY(16px);
+        transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+        position: relative;
+      }
+      #svg-opt-overlay.show #svg-opt-card { transform: scale(1) translateY(0); }
+
+      #svg-opt-card::before {
+        content: '';
+        position: absolute; top: -1px; left: 20%; right: 20%; height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(124,106,255,0.6), transparent);
+      }
+
+      .svg-opt-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .svg-opt-title {
+        font-family: var(--font-head, 'Syne', sans-serif);
+        font-size: 18px; font-weight: 700; color: var(--text, #eeedf8);
+        letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px;
+      }
+      .svg-opt-close {
+        background: none; border: none; color: var(--text3, #4a4962);
+        font-size: 18px; cursor: pointer; padding: 4px 8px;
+        border-radius: 6px; transition: all 0.18s ease;
+      }
+      .svg-opt-close:hover { color: var(--text, #eeedf8); background: rgba(255,255,255,0.06); }
+
+      /* Upload */
+      .svg-upload-zone {
+        border: 2px dashed var(--border2, rgba(255,255,255,0.13));
+        border-radius: 12px; padding: 32px 20px; text-align: center;
+        cursor: pointer; transition: all 0.18s ease; margin-bottom: 20px;
+      }
+      .svg-upload-zone:hover, .svg-upload-zone.drag-over {
+        border-color: var(--accent, #7c6aff);
+        background: rgba(124,106,255,0.05);
+      }
+      .svg-upload-zone .uz-icon { font-size: 32px; margin-bottom: 8px; }
+      .svg-upload-zone strong { font-size: 14px; color: var(--text, #eeedf8); display: block; margin-bottom: 4px; }
+      .svg-upload-zone p { font-size: 12px; color: var(--text2, #8887a4); }
+
+      /* Options */
+      .svg-opt-options {
+        background: var(--bg3, #16162a);
+        border: 1px solid var(--border, rgba(255,255,255,0.07));
+        border-radius: 10px; padding: 4px 16px; margin-bottom: 16px;
+      }
+      .svg-opt-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 11px 0; border-bottom: 1px solid var(--border, rgba(255,255,255,0.07));
+        gap: 12px;
+      }
+      .svg-opt-row:last-child { border: none; }
+      .svg-opt-row-label { font-size: 13px; font-weight: 500; color: var(--text, #eeedf8); }
+      .svg-opt-row-desc  { font-size: 11px; color: var(--text2, #8887a4); margin-top: 2px; }
+
+      /* Stats setelah optimize */
+      .svg-stats {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+        margin-bottom: 16px; display: none;
+      }
+      .svg-stats.show { display: grid; }
+      .svg-stat-card {
+        background: var(--surface, #1c1c30);
+        border: 1px solid var(--border, rgba(255,255,255,0.07));
+        border-radius: 10px; padding: 14px 12px; text-align: center;
+      }
+      .svg-stat-val {
+        font-family: var(--font-head, 'Syne', sans-serif);
+        font-size: 20px; font-weight: 700; color: var(--text, #eeedf8);
+        margin-bottom: 3px;
+      }
+      .svg-stat-val.green { color: var(--teal, #00d4a8); }
+      .svg-stat-val.accent { color: var(--accent2, #b8abff); }
+      .svg-stat-lbl { font-size: 11px; color: var(--text3, #4a4962); }
+
+      /* Preview split */
+      .svg-preview-wrap {
+        display: none; gap: 12px; margin-bottom: 16px;
+      }
+      .svg-preview-wrap.show { display: grid; grid-template-columns: 1fr 1fr; }
+      .svg-preview-box {
+        background: #fff;
+        border-radius: 10px; padding: 12px;
+        display: flex; align-items: center; justify-content: center;
+        min-height: 140px; border: 1px solid var(--border2, rgba(255,255,255,0.13));
+        position: relative;
+      }
+      .svg-preview-box svg { max-width: 100%; max-height: 140px; }
+      .svg-preview-label {
+        position: absolute; top: 8px; left: 8px;
+        font-size: 10px; font-weight: 600;
+        background: rgba(0,0,0,0.6); color: #fff;
+        padding: 2px 7px; border-radius: 4px;
+      }
+      .svg-preview-box.error-preview {
+        background: rgba(255,107,107,0.06);
+        border-color: rgba(255,107,107,0.25);
+        color: var(--danger, #ff6b6b); font-size: 12px; text-align: center;
+      }
+
+      /* Code diff */
+      .svg-code-preview {
+        background: var(--bg, #08080f);
+        border: 1px solid var(--border2, rgba(255,255,255,0.13));
+        border-radius: 8px; padding: 12px;
+        font-family: var(--font-mono, monospace); font-size: 10.5px;
+        color: var(--text2, #8887a4); line-height: 1.6;
+        max-height: 140px; overflow-y: auto;
+        margin-bottom: 16px; display: none; white-space: pre-wrap; word-break: break-all;
+      }
+      .svg-code-preview.show { display: block; }
+
+      /* Actions */
+      .svg-opt-actions { display: flex; gap: 10px; }
+      .svg-btn-cancel {
+        padding: 10px 18px; border-radius: 9px;
+        border: 1px solid rgba(255,255,255,0.10);
+        background: transparent; color: var(--text2, #8887a4);
+        font-family: var(--font-body, sans-serif); font-size: 13.5px; font-weight: 500;
+        cursor: pointer; transition: all 0.18s ease;
+      }
+      .svg-btn-cancel:hover { background: rgba(255,255,255,0.06); color: var(--text, #eeedf8); }
+      .svg-btn-optimize {
+        flex: 1; padding: 10px 18px; border-radius: 9px; border: none;
+        background: var(--accent, #7c6aff); color: #fff;
+        font-family: var(--font-body, sans-serif); font-size: 13.5px; font-weight: 600;
+        cursor: pointer; transition: all 0.2s ease;
+        box-shadow: 0 4px 16px rgba(124,106,255,0.3);
+      }
+      .svg-btn-optimize:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+      .svg-btn-optimize:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+      .svg-btn-dl {
+        padding: 10px 18px; border-radius: 9px; border: none;
+        background: rgba(0,212,168,0.12);
+        border: 1px solid rgba(0,212,168,0.25);
+        color: var(--teal, #00d4a8);
+        font-family: var(--font-body, sans-serif); font-size: 13.5px; font-weight: 600;
+        cursor: pointer; transition: all 0.18s ease; display: none;
+      }
+      .svg-btn-dl:hover { background: rgba(0,212,168,0.2); }
+      .svg-btn-dl.show { display: block; }
+
+      @media (max-width: 600px) {
+        #svg-opt-card { padding: 20px 16px; border-radius: 16px; }
+        .svg-preview-wrap.show { grid-template-columns: 1fr; }
+        .svg-stats.show { grid-template-columns: repeat(3,1fr); gap: 6px; }
+        .svg-stat-val { font-size: 16px; }
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  // ── State ───────────────────────────────────────────────
+  let svgOriginal   = "";
+  let svgOptimized  = "";
+  let svgFilename   = "optimized.svg";
+
+  // ── Inject modal ─────────────────────────────────────────
+  function injectModal() {
+    if (document.getElementById("svg-opt-overlay")) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "svg-opt-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.innerHTML = `
+      <div id="svg-opt-card">
+        <div class="svg-opt-header">
+          <h2 class="svg-opt-title">
+            <span style="font-size:22px">🎯</span> SVG Optimizer
+          </h2>
+          <button class="svg-opt-close" onclick="window.svgOptClose()">✕</button>
+        </div>
+
+        <!-- Upload zone -->
+        <div class="svg-upload-zone" id="svg-upload-zone"
+          onclick="document.getElementById('svg-file-input').click()">
+          <div class="uz-icon">📄</div>
+          <strong>Klik atau seret file SVG ke sini</strong>
+          <p>Hanya file .svg yang didukung</p>
+          <input type="file" id="svg-file-input" accept=".svg,image/svg+xml" style="display:none"
+            onchange="window.svgOptLoad(this.files[0])" />
+        </div>
+
+        <!-- Info file -->
+        <div id="svg-file-info" style="display:none;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:9px">
+            <span style="font-size:20px">📄</span>
+            <div style="flex:1;min-width:0">
+              <p id="svg-fname" style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></p>
+              <p id="svg-fsize" style="font-size:11px;color:var(--text3);margin-top:1px"></p>
+            </div>
+            <button onclick="window.svgOptReset()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:4px 6px">✕</button>
+          </div>
+        </div>
+
+        <!-- Options -->
+        <div class="svg-opt-options" id="svg-opt-options">
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Hapus komentar</p>
+              <p class="svg-opt-row-desc"><!-- komentar --> dihapus dari SVG</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-comments" checked /><span class="toggle-track"></span></label>
+          </div>
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Hapus metadata</p>
+              <p class="svg-opt-row-desc">Tag &lt;metadata&gt;, &lt;title&gt;, &lt;desc&gt; dihapus</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-metadata" checked /><span class="toggle-track"></span></label>
+          </div>
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Hapus atribut editor</p>
+              <p class="svg-opt-row-desc">Atribut Inkscape, Illustrator, Sketch dihapus</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-editor-attrs" checked /><span class="toggle-track"></span></label>
+          </div>
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Hapus group kosong</p>
+              <p class="svg-opt-row-desc">Tag &lt;g&gt; tanpa konten atau transformasi dihapus</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-empty-groups" checked /><span class="toggle-track"></span></label>
+          </div>
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Minifikasi angka</p>
+              <p class="svg-opt-row-desc">0.50000 → .5 — persingkat angka desimal</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-numbers" checked /><span class="toggle-track"></span></label>
+          </div>
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Hapus whitespace berlebih</p>
+              <p class="svg-opt-row-desc">Spasi & newline tidak perlu dihapus</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-whitespace" checked /><span class="toggle-track"></span></label>
+          </div>
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Persingkat warna hex</p>
+              <p class="svg-opt-row-desc">#ffffff → #fff, #000000 → #000</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-colors" checked /><span class="toggle-track"></span></label>
+          </div>
+          <div class="svg-opt-row">
+            <div>
+              <p class="svg-opt-row-label">Hapus style default</p>
+              <p class="svg-opt-row-desc">Atribut yang sama dengan nilai default SVG dihapus</p>
+            </div>
+            <label class="toggle"><input type="checkbox" id="opt-defaults" checked /><span class="toggle-track"></span></label>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="svg-stats" id="svg-stats">
+          <div class="svg-stat-card">
+            <div class="svg-stat-val" id="stat-original-size">—</div>
+            <div class="svg-stat-lbl">Ukuran asli</div>
+          </div>
+          <div class="svg-stat-card">
+            <div class="svg-stat-val green" id="stat-optimized-size">—</div>
+            <div class="svg-stat-lbl">Setelah optimasi</div>
+          </div>
+          <div class="svg-stat-card">
+            <div class="svg-stat-val accent" id="stat-saved">—</div>
+            <div class="svg-stat-lbl">Ukuran berkurang</div>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="svg-preview-wrap" id="svg-preview-wrap">
+          <div class="svg-preview-box" id="svg-preview-before">
+            <span class="svg-preview-label">Sebelum</span>
+          </div>
+          <div class="svg-preview-box" id="svg-preview-after">
+            <span class="svg-preview-label">Sesudah</span>
+          </div>
+        </div>
+
+        <!-- Code preview -->
+        <div class="svg-code-preview" id="svg-code-preview"></div>
+
+        <!-- Actions -->
+        <div class="svg-opt-actions">
+          <button class="svg-btn-cancel" onclick="window.svgOptClose()">Batal</button>
+          <button class="svg-btn-optimize" id="svg-btn-optimize" onclick="window.svgOptRun()" disabled>
+            🎯 Optimasi SVG
+          </button>
+          <button class="svg-btn-dl" id="svg-btn-dl" onclick="window.svgOptDownload()">
+            ⬇ Unduh SVG
+          </button>
+        </div>
+      </div>
+    `;
+
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) window.svgOptClose(); });
+    document.body.appendChild(overlay);
+
+    // Drag drop
+    const uz = document.getElementById("svg-upload-zone");
+    uz.addEventListener("dragover",  e => { e.preventDefault(); uz.classList.add("drag-over"); });
+    uz.addEventListener("dragleave", () => uz.classList.remove("drag-over"));
+    uz.addEventListener("drop", e => {
+      e.preventDefault(); uz.classList.remove("drag-over");
+      const f = e.dataTransfer?.files?.[0];
+      if (f) window.svgOptLoad(f);
+    });
+  }
+
+  // ── Load file ────────────────────────────────────────────
+  window.svgOptLoad = function(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".svg") && file.type !== "image/svg+xml") {
+      if (typeof showToast === "function") showToast("Hanya file .svg yang didukung", "error");
+      return;
+    }
+
+    svgFilename = file.name.replace(/\.svg$/i, "") + "_optimized.svg";
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      svgOriginal  = e.target.result;
+      svgOptimized = "";
+
+      document.getElementById("svg-upload-zone").style.display = "none";
+      document.getElementById("svg-file-info").style.display   = "block";
+      document.getElementById("svg-fname").textContent = file.name;
+      document.getElementById("svg-fsize").textContent = fmtSize(file.size) + " · " + svgOriginal.length + " karakter";
+
+      document.getElementById("svg-stats").classList.remove("show");
+      document.getElementById("svg-preview-wrap").classList.remove("show");
+      document.getElementById("svg-code-preview").classList.remove("show");
+      document.getElementById("svg-btn-dl").classList.remove("show");
+      document.getElementById("svg-btn-optimize").disabled = false;
+      document.getElementById("svg-btn-optimize").textContent = "🎯 Optimasi SVG";
+    };
+    reader.readAsText(file, "utf-8");
+  };
+
+  // ── Reset ────────────────────────────────────────────────
+  window.svgOptReset = function() {
+    svgOriginal = svgOptimized = "";
+    document.getElementById("svg-upload-zone").style.display = "block";
+    document.getElementById("svg-file-info").style.display   = "none";
+    document.getElementById("svg-stats").classList.remove("show");
+    document.getElementById("svg-preview-wrap").classList.remove("show");
+    document.getElementById("svg-code-preview").classList.remove("show");
+    document.getElementById("svg-btn-dl").classList.remove("show");
+    document.getElementById("svg-btn-optimize").disabled = true;
+    document.getElementById("svg-file-input").value = "";
+  };
+
+  // ── Run optimizer ────────────────────────────────────────
+  window.svgOptRun = function() {
+    if (!svgOriginal) return;
+
+    const opts = {
+      removeComments:   document.getElementById("opt-comments")?.checked    ?? true,
+      removeMetadata:   document.getElementById("opt-metadata")?.checked    ?? true,
+      removeEditorAttrs:document.getElementById("opt-editor-attrs")?.checked ?? true,
+      removeEmptyGroups:document.getElementById("opt-empty-groups")?.checked ?? true,
+      minifyNumbers:    document.getElementById("opt-numbers")?.checked      ?? true,
+      removeWhitespace: document.getElementById("opt-whitespace")?.checked   ?? true,
+      shortenColors:    document.getElementById("opt-colors")?.checked       ?? true,
+      removeDefaults:   document.getElementById("opt-defaults")?.checked     ?? true,
+    };
+
+    const btn = document.getElementById("svg-btn-optimize");
+    btn.disabled = true;
+    btn.textContent = "⏳ Mengoptimasi...";
+
+    setTimeout(() => {
+      try {
+        svgOptimized = optimizeSVG(svgOriginal, opts);
+        showSVGResults();
+        btn.textContent = "✓ Dioptimasi — Jalankan Ulang";
+        btn.disabled = false;
+      } catch(e) {
+        if (typeof showToast === "function") showToast("Gagal: " + e.message, "error");
+        btn.disabled = false;
+        btn.textContent = "🎯 Optimasi SVG";
+      }
+    }, 50);
+  };
+
+  // ── Core optimizer — pure JS, tanpa library ──────────────
+  function optimizeSVG(svg, opts) {
+    let out = svg;
+
+    // 1. Hapus komentar
+    if (opts.removeComments) {
+      out = out.replace(/<!--[\s\S]*?-->/g, "");
+    }
+
+    // 2. Hapus metadata, title, desc
+    if (opts.removeMetadata) {
+      out = out.replace(/<metadata[\s\S]*?<\/metadata>/gi, "");
+      out = out.replace(/<title[\s\S]*?<\/title>/gi, "");
+      out = out.replace(/<desc[\s\S]*?<\/desc>/gi, "");
+    }
+
+    // 3. Hapus atribut editor (Inkscape, Illustrator, Sketch, Adobe)
+    if (opts.removeEditorAttrs) {
+      // Namespace declarations
+      out = out.replace(/\s+xmlns:(inkscape|sodipodi|dc|cc|rdf|xlink|sketch|i)="[^"]*"/gi, "");
+      // Atribut dengan prefix
+      out = out.replace(/\s+(inkscape|sodipodi|dc|cc|rdf|sketch|i):[a-z-]+=["'][^"']*["']/gi, "");
+      // Elemen Inkscape/Sodipodi
+      out = out.replace(/<(sodipodi|inkscape):[^>]*\/>/gi, "");
+      out = out.replace(/<(sodipodi|inkscape):[\s\S]*?<\/(sodipodi|inkscape):[^>]*>/gi, "");
+      // XML processing instructions
+      out = out.replace(/<\?[^>]*\?>/g, "");
+      // Generator comment (Adobe, Sketch)
+      out = out.replace(/generator="[^"]*"/gi, "");
+      out = out.replace(/version="[^"]*"/gi, (m) => m); // keep SVG version
+    }
+
+    // 4. Hapus group kosong <g></g> atau <g/>
+    if (opts.removeEmptyGroups) {
+      // Beberapa iterasi untuk nested empty groups
+      for (let i = 0; i < 5; i++) {
+        const before = out;
+        out = out.replace(/<g(\s[^>]*)?\s*>\s*<\/g>/gi, "");
+        out = out.replace(/<g(\s[^>]*)?\s*\/>/gi, "");
+        if (out === before) break;
+      }
+    }
+
+    // 5. Minifikasi angka desimal
+    if (opts.minifyNumbers) {
+      // 0.5 → .5, -0.5 → -.5
+      out = out.replace(/(-?)0\.(\d)/g, "$1.$2");
+      // Hapus trailing zeros: 1.500 → 1.5, 1.50000 → 1.5
+      out = out.replace(/(\d+\.\d*?)0+(?=\D|$)/g, "$1");
+      // 1. → 1
+      out = out.replace(/(\d+)\.(?=\D|$)/g, "$1");
+      // Batasi presisi ke 3 desimal untuk path data
+      out = out.replace(/(\d+\.\d{4,})/g, (m) => parseFloat(parseFloat(m).toFixed(3)).toString());
+    }
+
+    // 6. Hapus whitespace berlebih
+    if (opts.removeWhitespace) {
+      // Newline + tabs antara tag
+      out = out.replace(/>\s+</g, "><");
+      // Spasi berlebih dalam atribut
+      out = out.replace(/\s{2,}/g, " ");
+      // Spasi di awal/akhir
+      out = out.trim();
+      // Spasi sebelum />
+      out = out.replace(/\s+\/>/g, "/>");
+      // Spasi sebelum >
+      out = out.replace(/\s+>/g, ">");
+    }
+
+    // 7. Persingkat warna hex
+    if (opts.shortenColors) {
+      // #aabbcc → #abc kalau bisa
+      out = out.replace(/#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3/g, "#$1$2$3");
+      // Named colors ke hex pendek yang lebih ringkas
+      const colorMap = {
+        "black":"#000","white":"#fff","red":"red","green":"green","blue":"blue",
+        "#ffffff":"#fff","#000000":"#000","#ff0000":"red","#00ff00":"#0f0","#0000ff":"#00f",
+        "#ffff00":"#ff0","#ff00ff":"#f0f","#00ffff":"#0ff",
+      };
+      Object.entries(colorMap).forEach(([k, v]) => {
+        if (k.startsWith("#")) {
+          out = out.replace(new RegExp(k.replace("#","\\#"), "gi"), v);
+        }
+      });
+    }
+
+    // 8. Hapus atribut default SVG
+    if (opts.removeDefaults) {
+      // fill="black" adalah default
+      out = out.replace(/\s+fill="black"/gi, "");
+      // stroke="none" adalah default
+      out = out.replace(/\s+stroke="none"/gi, "");
+      // fill-opacity="1" adalah default
+      out = out.replace(/\s+fill-opacity="1"/gi, "");
+      // opacity="1" adalah default
+      out = out.replace(/\s+opacity="1"/gi, "");
+      // visibility="visible" adalah default
+      out = out.replace(/\s+visibility="visible"/gi, "");
+      // display="inline" adalah default
+      out = out.replace(/\s+display="inline"/gi, "");
+      // overflow="visible" adalah default pada SVG root
+      out = out.replace(/\s+overflow="visible"/gi, "");
+      // xml:space="preserve" sering tidak diperlukan
+      out = out.replace(/\s+xml:space="preserve"/gi, "");
+    }
+
+    return out;
+  }
+
+  // ── Tampilkan hasil ──────────────────────────────────────
+  function showSVGResults() {
+    const origSize = new Blob([svgOriginal]).size;
+    const optSize  = new Blob([svgOptimized]).size;
+    const saved    = Math.round((1 - optSize / origSize) * 100);
+
+    // Stats
+    document.getElementById("stat-original-size").textContent  = fmtSize(origSize);
+    document.getElementById("stat-optimized-size").textContent = fmtSize(optSize);
+    document.getElementById("stat-saved").textContent          = saved + "%";
+    document.getElementById("svg-stats").classList.add("show");
+
+    // Preview
+    const beforeBox = document.getElementById("svg-preview-before");
+    const afterBox  = document.getElementById("svg-preview-after");
+
+    try {
+      // Render SVG asli
+      const beforeWrap = document.createElement("div");
+      beforeWrap.innerHTML = svgOriginal;
+      const beforeSvg = beforeWrap.querySelector("svg");
+      if (beforeSvg) {
+        beforeSvg.style.maxWidth = "100%";
+        beforeSvg.style.maxHeight = "130px";
+        // Hapus label lama
+        while (beforeBox.children.length > 1) beforeBox.removeChild(beforeBox.lastChild);
+        beforeBox.appendChild(beforeSvg);
+        beforeBox.classList.remove("error-preview");
+      }
+    } catch(_) {
+      beforeBox.classList.add("error-preview");
+      beforeBox.innerHTML = "<span class='svg-preview-label'>Sebelum</span>Tidak bisa dirender";
+    }
+
+    try {
+      // Render SVG optimized
+      const afterWrap = document.createElement("div");
+      afterWrap.innerHTML = svgOptimized;
+      const afterSvg = afterWrap.querySelector("svg");
+      if (afterSvg) {
+        afterSvg.style.maxWidth = "100%";
+        afterSvg.style.maxHeight = "130px";
+        while (afterBox.children.length > 1) afterBox.removeChild(afterBox.lastChild);
+        afterBox.appendChild(afterSvg);
+        afterBox.classList.remove("error-preview");
+      }
+    } catch(_) {
+      afterBox.classList.add("error-preview");
+      afterBox.innerHTML = "<span class='svg-preview-label'>Sesudah</span>Tidak bisa dirender";
+    }
+
+    document.getElementById("svg-preview-wrap").classList.add("show");
+
+    // Code preview (50 char pertama & terakhir untuk perbandingan)
+    const codeEl = document.getElementById("svg-code-preview");
+    const preview = svgOptimized.length > 500
+      ? svgOptimized.slice(0, 400) + "\n\n... (" + (svgOptimized.length - 400) + " karakter lagi) ...\n\n" + svgOptimized.slice(-100)
+      : svgOptimized;
+    codeEl.textContent = preview;
+    codeEl.classList.add("show");
+
+    // Download button
+    document.getElementById("svg-btn-dl").classList.add("show");
+
+    if (typeof showToast === "function") {
+      showToast(`SVG dioptimasi! Hemat ${saved}% (${fmtSize(origSize)} → ${fmtSize(optSize)})`);
+    }
+
+    // Catat ke riwayat konversi kalau tersedia
+    if (typeof window.convHistoryAdd === "function") {
+      window.convHistoryAdd(
+        "svg_optimizer", "SVG Optimizer", "🎯",
+        [{ name: svgFilename, size: origSize }],
+        `${fmtSize(origSize)} → ${fmtSize(optSize)} (hemat ${saved}%)`
+      );
+    }
+  }
+
+  // ── Download ─────────────────────────────────────────────
+  window.svgOptDownload = function() {
+    if (!svgOptimized) return;
+    const blob = new Blob([svgOptimized], { type:"image/svg+xml;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = svgFilename;
+    a.click();
+    if (typeof showToast === "function") showToast("SVG diunduh ✓");
+  };
+
+  // ── Open / close ─────────────────────────────────────────
+  window.svgOptOpen = function() {
+    injectStyles();
+    injectModal();
+    window.svgOptReset();
+
+    const overlay = document.getElementById("svg-opt-overlay");
+    if (!overlay) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        overlay.classList.add("show");
+        document.body.style.overflow = "hidden";
+      });
+    });
+  };
+
+  window.svgOptClose = function() {
+    const overlay = document.getElementById("svg-opt-overlay");
+    if (!overlay) return;
+    overlay.classList.remove("show");
+    document.body.style.overflow = "";
+  };
+
+  // ── Keyboard ─────────────────────────────────────────────
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const overlay = document.getElementById("svg-opt-overlay");
+      if (overlay?.classList.contains("show")) window.svgOptClose();
+    }
+  });
+
+  // ── Inject tool card ke grid converter ──────────────────
+  function injectToolCard() {
+    // Cari grid dokumen untuk append tool card SVG di sana
+    const docGrid = document.getElementById("document-tools-grid");
+    if (!docGrid || docGrid.querySelector("[data-toolid='svg_optimizer']")) return;
+
+    const card = document.createElement("div");
+    card.className = "tool-card";
+    card.setAttribute("role", "button");
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("data-tool", "svg_optimizer");
+    card.setAttribute("data-title", "SVG Optimizer");
+    card.setAttribute("data-desc", "Perkecil file SVG hapus metadata atribut editor");
+    card.setAttribute("data-tags", "svg optimizer optimalkan kecil vektor gambar dokumen");
+    card.setAttribute("data-toolid", "svg_optimizer");
+    card.innerHTML = `
+      <div class="tc-icon">🎯</div>
+      <div class="tc-title">SVG Optimizer</div>
+      <div class="tc-desc">Perkecil file SVG</div>
+    `;
+    docGrid.appendChild(card);
+  }
+
+  // ── Utilitas ─────────────────────────────────────────────
+  function fmtSize(b) {
+    if (b < 1024)    return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+    return (b / 1048576).toFixed(2) + " MB";
+  }
+
+  // ── Init ─────────────────────────────────────────────────
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", injectToolCard);
+  } else {
+    setTimeout(injectToolCard, 150);
+  }
+
+})();
+
+// ===== Halaman converter =====
 
 // ── Inisialisasi halaman ───────────────────────────────────
 initLocalApp();
@@ -58,7 +1868,6 @@ const TOOLS = {
   rotate:       { title:"Putar PDF",             desc:"Putar semua halaman PDF",                                               icon:"🔄", accept:".pdf",        multiple:false, hint:"Unggah 1 file PDF" },
   deletepages:  { title:"Hapus Halaman PDF",     desc:"Hapus halaman tertentu dari PDF",                                       icon:"🗑",  accept:".pdf",        multiple:false, hint:"Unggah 1 file PDF" },
   compresspdf:  { title:"Kompres PDF",           desc:"Perkecil ukuran file PDF dengan mengurangi kualitas gambar di dalamnya",icon:"🗜",  accept:".pdf",        multiple:false, hint:"Unggah 1 file PDF" },
-  watermarkpdf: { title:"Tanda Air PDF",         desc:"Tambahkan teks tanda air di setiap halaman PDF",                       icon:"💧", accept:".pdf",        multiple:false, hint:"Unggah 1 file PDF" },
   passwordpdf:  { title:"Sandi PDF",             desc:"Lindungi PDF dengan kata sandi enkripsi",                               icon:"🔐", accept:".pdf",        multiple:false, hint:"Unggah 1 file PDF" },
   pdf2txt:      { title:"PDF ke Teks",           desc:"Ekstrak semua teks dari file PDF",                                      icon:"📑", accept:".pdf",        multiple:false, hint:"Unggah 1 file PDF (teks harus bisa disorot)" },
   img2pdf:      { title:"Gambar ke PDF",         desc:"Susun beberapa gambar menjadi dokumen PDF",                             icon:"🖼",  accept:"image/*",     multiple:true,  hint:"Unggah satu atau beberapa gambar (JPG, PNG, WEBP)" },
@@ -71,11 +1880,8 @@ const TOOLS = {
   rotate_img:   { title:"Putar / Balik",         desc:"Putar atau mirror gambar",                                              icon:"🔄", accept:"image/*",     multiple:false, hint:"Unggah 1 file gambar" },
   adjust:       { title:"Sesuaikan Gambar",      desc:"Ubah kecerahan, kontras, dan saturasi",                                 icon:"🎛",  accept:"image/*",     multiple:false, hint:"Unggah 1 file gambar" },
   grayscale:    { title:"Skala Abu-abu",         desc:"Ubah gambar berwarna menjadi hitam putih",                              icon:"🎨", accept:"image/*",     multiple:false, hint:"Unggah 1 file gambar" },
-  blur:         { title:"Efek Blur",             desc:"Tambahkan efek blur pada gambar",                                       icon:"🌫",  accept:"image/*",     multiple:false, hint:"Unggah 1 file gambar" },
-  watermarkimg: { title:"Tanda Air Gambar",      desc:"Tambahkan teks tanda air di atas foto",                                 icon:"💧", accept:"image/*",     multiple:false, hint:"Unggah 1 file gambar" },
   exif:         { title:"Penampil EXIF",         desc:"Lihat metadata foto dan hapus untuk privasi",                           icon:"📋", accept:"image/jpeg,image/jpg", multiple:false, hint:"Unggah 1 file gambar JPG" },
   base64img:    { title:"Gambar → Base64",       desc:"Encode gambar menjadi string Base64 untuk embed HTML",                  icon:"🔤", accept:"image/*",     multiple:false, hint:"Unggah 1 file gambar" },
-  mergeimg:     { title:"Gabung Gambar",         desc:"Susun beberapa gambar horizontal/vertikal jadi satu",                   icon:"🧩", accept:"image/*",     multiple:true,  hint:"Unggah 2 gambar atau lebih" },
   ascii:        { title:"Seni ASCII",            desc:"Ubah gambar menjadi karakter teks ASCII yang bisa disalin atau diunduh",icon:"🎨", accept:"image/*",     multiple:false, hint:"Unggah 1 file gambar tanpa background (JPG, PNG, WEBP)" },
   // Dokumen
   md2html:      { title:"Markdown → HTML",       desc:"Konversi file .md menjadi halaman HTML siap pakai",                    icon:"📝", accept:".md,.txt",    multiple:false, hint:"Unggah file .md atau .txt berisi Markdown" },
@@ -122,28 +1928,6 @@ const TOOL_OPTIONS = {
         <label class="format-pill"><input type="radio" name="pdf-compress" value="low" /> Ringan</label>
         <label class="format-pill"><input type="radio" name="pdf-compress" value="med" checked /> Sedang</label>
         <label class="format-pill"><input type="radio" name="pdf-compress" value="high" /> Agresif</label>
-      </div>
-    </div>`,
-
-  watermarkpdf: `
-    <div class="option-row">
-      <div><p class="opt-label">Teks Tanda Air</p></div>
-      <input type="text" id="wm-text" class="form-input" placeholder="RAHASIA / DRAF / nama kamu"
-        style="max-width:220px" value="RAHASIA" maxlength="50"
-        oninput="this.value=this.value.replace(/[<>\"'\`]/g,'')" />
-    </div>
-    <div class="option-row">
-      <div><p class="opt-label">Opasitas (%)</p></div>
-      <input type="range" id="wm-opacity" min="5" max="60" value="20" class="slider" style="width:140px"
-        oninput="document.getElementById('wm-op-val').textContent=this.value+'%'" />
-      <span id="wm-op-val" style="font-size:12px;color:var(--accent2);min-width:36px">20%</span>
-    </div>
-    <div class="option-row">
-      <div><p class="opt-label">Warna teks</p></div>
-      <div class="format-pills">
-        <label class="format-pill"><input type="radio" name="wm-color" value="gray" checked /> Abu-abu</label>
-        <label class="format-pill"><input type="radio" name="wm-color" value="red" /> Merah</label>
-        <label class="format-pill"><input type="radio" name="wm-color" value="blue" /> Biru</label>
       </div>
     </div>`,
 
@@ -258,50 +2042,6 @@ const TOOL_OPTIONS = {
       <canvas id="adjust-preview-canvas" style="max-width:100%;border-radius:8px;border:1px solid var(--border2)"></canvas>
     </div>`,
 
-  blur: `
-    <div class="option-row">
-      <div><p class="opt-label">Intensitas blur: <span id="blur-val">4</span>px</p></div>
-      <input type="range" id="blur-amount" min="1" max="30" value="4" class="slider" style="width:140px"
-        oninput="document.getElementById('blur-val').textContent=this.value" />
-    </div>`,
-
-  watermarkimg: `
-    <div class="option-row">
-      <div><p class="opt-label">Teks Tanda Air</p></div>
-      <input type="text" id="wmi-text" class="form-input" placeholder="© nama / DRAF / logo teks"
-        style="max-width:220px" value="© UcupzConvert" maxlength="80"
-        oninput="this.value=this.value.replace(/[<>\"'\`]/g,'');previewWatermarkImg()" />
-    </div>
-    <div class="option-row">
-      <div><p class="opt-label">Posisi</p></div>
-      <div class="format-pills">
-        <label class="format-pill"><input type="radio" name="wmi-pos" value="center" checked onchange="previewWatermarkImg()" /> Tengah</label>
-        <label class="format-pill"><input type="radio" name="wmi-pos" value="br" onchange="previewWatermarkImg()" /> Kanan Bawah</label>
-        <label class="format-pill"><input type="radio" name="wmi-pos" value="bl" onchange="previewWatermarkImg()" /> Kiri Bawah</label>
-      </div>
-    </div>
-    <div class="option-row">
-      <div><p class="opt-label">Opasitas: <span id="wmi-op-val">35</span>%</p></div>
-      <input type="range" id="wmi-opacity" min="5" max="100" value="35" class="slider" style="width:140px"
-        oninput="document.getElementById('wmi-op-val').textContent=this.value;previewWatermarkImg()" />
-    </div>
-    <div id="wmi-preview-wrap" style="display:none;margin-top:12px">
-      <canvas id="wmi-canvas" style="max-width:100%;border-radius:8px;border:1px solid var(--border2)"></canvas>
-    </div>`,
-
-  mergeimg: `
-    <div class="option-row">
-      <div><p class="opt-label">Susun</p></div>
-      <div class="format-pills">
-        <label class="format-pill"><input type="radio" name="merge-dir" value="h" checked /> Horizontal</label>
-        <label class="format-pill"><input type="radio" name="merge-dir" value="v" /> Vertikal</label>
-      </div>
-    </div>
-    <div class="option-row">
-      <div><p class="opt-label">Jarak antar gambar (px)</p></div>
-      <input type="number" id="merge-gap" class="form-input" value="0" min="0" max="200" style="max-width:80px" />
-    </div>`,
-
   csv2json: `
     <div class="option-row">
       <div><p class="opt-label">Mode konversi</p><p class="opt-desc">Terdeteksi otomatis dari ekstensi file</p></div>
@@ -400,8 +2140,8 @@ function _trackActivity(toolId) {
   const t = TOOLS[toolId];
   if (!t) return;
 
-  const pdfTools   = ["merge","split","rotate","deletepages","compresspdf","watermarkpdf","passwordpdf","pdf2txt","img2pdf","pdf2img"];
-  const imageTools = ["imgconvert","compress","resize","crop","rotate_img","adjust","grayscale","blur","watermarkimg","exif","base64img","mergeimg","ascii"];
+  const pdfTools   = ["merge","split","rotate","deletepages","compresspdf","passwordpdf","pdf2txt","img2pdf","pdf2img"];
+  const imageTools = ["imgconvert","compress","resize","crop","rotate_img","adjust","grayscale","exif","base64img","ascii"];
   let cat = "Dokumen";
   if (pdfTools.includes(toolId))   cat = "PDF";
   if (imageTools.includes(toolId)) cat = "Gambar";
@@ -543,8 +2283,7 @@ function clearFiles() {
 }
 
 function onFilesReady() {
-  const imgTools = ["compress","resize","crop","rotate_img","adjust","grayscale","blur",
-                    "watermarkimg","exif","base64img","imgconvert","mergeimg","ascii"];
+  const imgTools = ["compress","resize","crop","rotate_img","adjust","grayscale","exif","base64img","imgconvert","ascii"];
   if (imgTools.includes(currentTool) && uploadedFiles.length > 0 && uploadedFiles[0].type.startsWith("image/")) {
     const url     = URL.createObjectURL(uploadedFiles[0]);
     const preview = document.getElementById("img-source-preview");
@@ -555,11 +2294,6 @@ function onFilesReady() {
     if (currentTool === "adjust") {
       const img = new Image();
       img.onload = () => { window._adjImg = img; previewAdjust(); };
-      img.src = url;
-    }
-    if (currentTool === "watermarkimg") {
-      const img = new Image();
-      img.onload = () => { window._wmiImg = img; previewWatermarkImg(); };
       img.src = url;
     }
   }
@@ -599,10 +2333,10 @@ function triggerDownload(i) {
 
 // ── Dispatcher utama ──────────────────────────────────────
 const handlers = {
-  merge, split, rotate, deletepages, compresspdf, watermarkpdf, passwordpdf,
+  merge, split, rotate, deletepages, compresspdf, passwordpdf,
   pdf2txt, img2pdf, pdf2img, imgconvert, compress, resize, crop: cropImg,
-  rotate_img, adjust: adjustImg, grayscale, blur: blurImg,
-  watermarkimg, exif: exifTool, base64img, mergeimg, md2html, csv2json, ascii: asciiArt,
+  rotate_img, adjust: adjustImg, grayscale,
+  exif: exifTool, base64img, md2html, csv2json, ascii: asciiArt,
 };
 
 async function processFile() {
@@ -712,35 +2446,6 @@ async function compresspdf() {
   const saved = Math.max(0, Math.round((1 - bytes.byteLength / buf.byteLength) * 100));
   const name  = uploadedFiles[0].name.replace(".pdf", "") + "_terkompres.pdf";
   showResult("PDF berhasil dikompres!", `${fmtSize(buf.byteLength)} → ${fmtSize(bytes.byteLength)}${saved > 0 ? ` (hemat ${saved}%)` : ""}`,
-    [{ label:"Unduh PDF", blob: new Blob([bytes], { type:"application/pdf" }), filename: name }]);
-}
-
-async function watermarkpdf() {
-  const wmText   = sanitizeString(document.getElementById("wm-text").value || "TANDA AIR", 50);
-  const opacity  = parseFloat(document.getElementById("wm-opacity").value) / 100;
-  const colorKey = document.querySelector('input[name="wm-color"]:checked').value;
-  const colorMap = { gray:[0.5,0.5,0.5], red:[0.85,0.1,0.1], blue:[0.1,0.2,0.8] };
-  const [r, g, b] = colorMap[colorKey];
-  const { PDFDocument, rgb, degrees } = PDFLib;
-  const buf = await uploadedFiles[0].arrayBuffer();
-  const doc = await PDFDocument.load(buf);
-  setProgress(30);
-  for (const page of doc.getPages()) {
-    const { width, height } = page.getSize();
-    const fontSize = Math.min(width, height) * 0.12;
-    page.drawText(wmText, {
-      x: width / 2 - (wmText.length * fontSize * 0.3),
-      y: height / 2,
-      size: fontSize,
-      color: rgb(r, g, b),
-      opacity,
-      rotate: degrees(45),
-    });
-  }
-  setProgress(85);
-  const bytes = await doc.save();
-  const name  = uploadedFiles[0].name.replace(".pdf", "") + "_tanda_air.pdf";
-  showResult("Tanda air berhasil ditambahkan!", `Teks "${wmText}" di ${doc.getPageCount()} halaman`,
     [{ label:"Unduh PDF", blob: new Blob([bytes], { type:"application/pdf" }), filename: name }]);
 }
 
@@ -1029,77 +2734,6 @@ async function grayscale() {
     [{ label:"Unduh", blob, filename: name }]);
 }
 
-async function blurImg() {
-  const file   = uploadedFiles[0];
-  const amount = parseInt(document.getElementById("blur-amount").value);
-  const bm     = await createImageBitmap(file);
-  const canvas = document.getElementById("work-canvas");
-  canvas.width = bm.width; canvas.height = bm.height;
-  const ctx = canvas.getContext("2d");
-  ctx.filter = `blur(${amount}px)`;
-  ctx.drawImage(bm, 0, 0);
-  setProgress(80);
-  const ext  = file.type === "image/png" ? "image/png" : "image/jpeg";
-  const blob = await new Promise(res => canvas.toBlob(res, ext, 0.93));
-  const name = file.name.replace(/\.[^.]+$/, "") + "_blur." + (ext === "image/png" ? "png" : "jpg");
-  showResult("Efek blur berhasil diterapkan!", "", [{ label:"Unduh", blob, filename: name }]);
-}
-
-function previewWatermarkImg() {
-  const img     = window._wmiImg;
-  if (!img) return;
-  const text    = sanitizeString(document.getElementById("wmi-text")?.value || "© Tanda Air", 80);
-  const pos     = document.querySelector('input[name="wmi-pos"]:checked')?.value || "center";
-  const opacity = parseInt(document.getElementById("wmi-opacity")?.value || 35) / 100;
-  const pc      = document.getElementById("wmi-canvas");
-  const maxW    = Math.min(img.naturalWidth, 600);
-  const scale   = maxW / img.naturalWidth;
-  pc.width  = img.naturalWidth  * scale;
-  pc.height = img.naturalHeight * scale;
-  const ctx = pc.getContext("2d");
-  ctx.drawImage(img, 0, 0, pc.width, pc.height);
-  const fontSize = pc.width * 0.06;
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  ctx.fillStyle   = `rgba(255,255,255,${opacity})`;
-  ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.4})`;
-  ctx.lineWidth = 2;
-  ctx.textAlign    = pos === "center" ? "center" : (pos === "br" ? "right" : "left");
-  ctx.textBaseline = pos === "center" ? "middle" : "bottom";
-  const tx = pos === "center" ? pc.width/2 : (pos === "br" ? pc.width-16 : 16);
-  const ty = pos === "center" ? pc.height/2 : pc.height-16;
-  ctx.strokeText(text, tx, ty);
-  ctx.fillText(text, tx, ty);
-  document.getElementById("wmi-preview-wrap").style.display = "block";
-}
-
-async function watermarkimg() {
-  const file    = uploadedFiles[0];
-  const text    = sanitizeString(document.getElementById("wmi-text").value || "© Tanda Air", 80);
-  const pos     = document.querySelector('input[name="wmi-pos"]:checked').value;
-  const opacity = parseInt(document.getElementById("wmi-opacity").value) / 100;
-  const bm      = await createImageBitmap(file);
-  const canvas  = document.getElementById("work-canvas");
-  canvas.width = bm.width; canvas.height = bm.height;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(bm, 0, 0);
-  const fontSize = bm.width * 0.06;
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  ctx.fillStyle   = `rgba(255,255,255,${opacity})`;
-  ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.4})`;
-  ctx.lineWidth = 3;
-  ctx.textAlign    = pos === "center" ? "center" : (pos === "br" ? "right" : "left");
-  ctx.textBaseline = pos === "center" ? "middle" : "bottom";
-  const tx = pos === "center" ? bm.width/2 : (pos === "br" ? bm.width-24 : 24);
-  const ty = pos === "center" ? bm.height/2 : bm.height-24;
-  ctx.strokeText(text, tx, ty);
-  ctx.fillText(text, tx, ty);
-  setProgress(80);
-  const ext  = file.type === "image/png" ? "image/png" : "image/jpeg";
-  const blob = await new Promise(res => canvas.toBlob(res, ext, 0.93));
-  const name = file.name.replace(/\.[^.]+$/, "") + "_tanda_air." + (ext === "image/png" ? "png" : "jpg");
-  showResult("Tanda air berhasil ditambahkan!", "", [{ label:"Unduh", blob, filename: name }]);
-}
-
 async function exifTool() {
   const file = uploadedFiles[0];
   setProgress(30);
@@ -1208,35 +2842,6 @@ async function base64img() {
     </div>`;
   showResult("Gambar berhasil di-encode!", `${fmtSize(file.size)} → Base64 (${fmtSize(b64.length)})`,
     [{ label:"Unduh TXT", blob, filename: name }]);
-}
-
-async function mergeimg() {
-  if (uploadedFiles.length < 2) { showToast("Unggah minimal 2 gambar", "error"); return; }
-  const dir  = document.querySelector('input[name="merge-dir"]:checked').value;
-  const gap  = Math.min(200, Math.max(0, parseInt(document.getElementById("merge-gap").value) || 0));
-  const bitmaps = [];
-  for (const f of uploadedFiles) bitmaps.push(await createImageBitmap(f));
-  setProgress(50);
-  const canvas = document.getElementById("work-canvas");
-  if (dir === "h") {
-    canvas.width  = bitmaps.reduce((s, b) => s + b.width, 0)  + gap * (bitmaps.length - 1);
-    canvas.height = Math.max(...bitmaps.map(b => b.height));
-  } else {
-    canvas.width  = Math.max(...bitmaps.map(b => b.width));
-    canvas.height = bitmaps.reduce((s, b) => s + b.height, 0) + gap * (bitmaps.length - 1);
-  }
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  let cur = 0;
-  for (const bm of bitmaps) {
-    if (dir === "h") { ctx.drawImage(bm, cur, 0); cur += bm.width  + gap; }
-    else             { ctx.drawImage(bm, 0, cur); cur += bm.height + gap; }
-  }
-  setProgress(85);
-  const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.93));
-  showResult("Gambar berhasil digabung!", `${bitmaps.length} gambar → ${canvas.width}×${canvas.height}px`,
-    [{ label:"Unduh JPG", blob, filename:"gabungan_gambar.jpg" }]);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1486,4 +3091,99 @@ function escHtml(str) {
   // ulang setiap openTool() karena dropzone di-reset
   // Cukup pasang sekali di sini, handler akan tetap aktif
   _initDragDropFeedback();
+})();
+
+// ===== Service worker =====
+
+(function () {
+  if (!("serviceWorker" in navigator)) return;
+
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js");
+
+      // Cek update setiap 60 menit
+      setInterval(() => reg.update(), 60 * 60 * 1000);
+
+      // Deteksi ada Service Worker baru menunggu
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+
+        newWorker.addEventListener("statechange", () => {
+          // SW baru sudah siap tapi belum aktif
+          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdateBanner(newWorker);
+          }
+        });
+      });
+
+    } catch (err) {
+      console.warn("[SW] Registrasi gagal:", err);
+    }
+  });
+
+  /**
+   * Tampilkan banner notifikasi update tersedia.
+   * @param {ServiceWorker} worker
+   */
+  function showUpdateBanner(worker) {
+    // Jangan tampilkan duplikat
+    if (document.getElementById("sw-update-banner")) return;
+
+    const banner = document.createElement("div");
+    banner.id = "sw-update-banner";
+    banner.style.cssText = [
+      "position:fixed", "bottom:80px", "left:50%",
+      "transform:translateX(-50%)",
+      "z-index:99999",
+      "background:rgba(22,22,42,0.97)",
+      "border:1px solid rgba(124,106,255,0.4)",
+      "border-radius:12px",
+      "padding:14px 20px",
+      "display:flex", "align-items:center", "gap:14px",
+      "box-shadow:0 8px 32px rgba(0,0,0,0.5)",
+      "font-family:var(--font-body,sans-serif)",
+      "font-size:13px",
+      "color:#eeedf8",
+      "max-width:320px",
+      "width:calc(100% - 48px)",
+      "backdrop-filter:blur(12px)",
+    ].join(";");
+
+    banner.innerHTML = `
+      <span style="font-size:20px">✦</span>
+      <div style="flex:1">
+        <p style="font-weight:600;color:#b8abff;margin-bottom:2px">Update tersedia!</p>
+        <p style="font-size:12px;color:#8887a4">Versi baru Ucupz siap digunakan.</p>
+      </div>
+      <button id="sw-update-btn" style="
+        background:#7c6aff;color:#fff;border:none;border-radius:8px;
+        padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;
+        white-space:nowrap;font-family:inherit;flex-shrink:0;
+      ">Perbarui</button>
+      <button id="sw-dismiss-btn" style="
+        background:none;border:none;color:#4a4962;cursor:pointer;
+        font-size:18px;padding:0 2px;line-height:1;flex-shrink:0;
+      ">✕</button>
+    `;
+
+    document.body.appendChild(banner);
+
+    // Tombol perbarui — aktifkan SW baru dan reload
+    document.getElementById("sw-update-btn").onclick = () => {
+      worker.postMessage("SKIP_WAITING");
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        window.location.reload();
+      });
+    };
+
+    // Tombol tutup banner
+    document.getElementById("sw-dismiss-btn").onclick = () => {
+      banner.remove();
+    };
+
+    // Auto hilang setelah 30 detik
+    setTimeout(() => { if (banner.parentNode) banner.remove(); }, 30000);
+  }
 })();

@@ -5,30 +5,28 @@ Web app tanpa login untuk konversi file, memindai QR Code, dan membuat QR Code. 
 ## Struktur File
 
 ```
-ucupzconvert/
+ucupz/
 ├── index.html              ← Mengarahkan pengguna ke aplikasi
 ├── 404.html                ← Halaman error 404
 ├── manifest.json           ← PWA manifest (bisa di-install)
-├── favicon.png             ← Logo dan favicon aplikasi
+├── favicon-16.png          ← Favicon kecil
+├── favicon.png             ← Favicon 32×32
+├── favicon-180.png         ← Ikon Apple Touch
+├── favicon-192.png         ← Ikon PWA
+├── favicon-512.png         ← Logo dan ikon PWA
+├── sw.js                   ← Cache offline dan pembaruan aplikasi
 ├── pages/
 │   ├── converter.html      ← Tools konversi PDF & gambar
 │   ├── scan.html           ← Pemindai QR via kamera atau gambar
 │   └── qrcode.html         ← Generator QR Code
 ├── css/
 │   ├── style.css           ← Reset, variabel, layout, sidebar, skeleton
-│   └── pages.css           ← Komponen tiap halaman (dipindah dari inline)
+│   └── pages.css           ← Komponen halaman
 ├── js/
-│   ├── config.js           ← Konstanta & konfigurasi global
-│   ├── utils.js            ← Sanitasi data dan inisialisasi penyimpanan lokal
-│   ├── ui.js               ← Sidebar, navbar mobile, toast, transisi halaman
-│   ├── batch-processor.js  ← Proses batch gambar di halaman Convert
-│   ├── history-converter.js← Riwayat konversi di halaman Convert
-│   ├── svg-optimizer.js   ← Fitur SVG Optimizer di halaman Convert
-│   ├── sw-register.js     ← Registrasi service worker
 │   └── pages/
-│       ├── converter.js    ← Logika semua tools converter
-│       ├── scan.js         ← Kamera dan pemindaian QR
-│       └── qrcode.js       ← Logika generator QR Code
+│       ├── converter.js    ← Bundle converter, UI, riwayat, batch, dan SVG
+│       ├── scan.js         ← Bundle UI dan pemindaian QR
+│       └── qrcode.js       ← Bundle UI dan generator QR Code
 ├── vercel.json             ← Deploy config + CSP + routing 404
 └── .gitignore
 ```
@@ -91,11 +89,10 @@ Header CSP ketat dikonfigurasi di `vercel.json` — hanya domain yang diperlukan
 Tools converter memproses file di browser. Tema dan riwayat disimpan pada `localStorage` browser, bukan pada akun/server. Menghapus data browser akan menghapus data tersebut.
 
 ### Input Sanitization
-Semua input dari pengguna disanitasi sebelum disimpan:
-- `sanitizeString(str, maxLen)` — hapus karakter `< > " ' \``
+Input teks yang memerlukan pembersihan menggunakan helper `sanitizeString(str, maxLen)`, yang menghapus karakter `< > " ' \``.
 
 ### localStorage Bersih
-Hanya key yang terdaftar di `STORAGE_KEYS` (config.js) yang boleh ada.  
+Hanya key yang terdaftar di `STORAGE_KEYS` pada bundle halaman yang boleh ada.
 Key tidak dikenal dihapus otomatis saat halaman dibuka.
 
 ---
