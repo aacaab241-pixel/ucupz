@@ -66,7 +66,6 @@ function renderSidebar(activePage) {
           <span class="brand-icon" aria-hidden="true"><img src="../favicon-512.png" alt="" /></span>
           <span class="brand-name">Ucupz <span>${activePage === "converter" ? "Convert" : activePage === "scan" ? "Scan QR" : "QR Code"}</span></span>
         </a>
-        <span class="offline-status"><span aria-hidden="true"></span> Offline Ready</span>
         <div class="header-actions">
           <button class="header-icon-button install-app-button" type="button" data-action="install-app" aria-label="Instal aplikasi" title="Instal aplikasi">Instal</button>
           <button class="header-icon-button" type="button" data-action="toggle-theme" aria-label="Ganti tema" title="Ganti tema">☼</button>

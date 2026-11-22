@@ -476,15 +476,6 @@ button, input, textarea, select { font: inherit; }
   letter-spacing: -.01em;
 }
 .brand-name span { color: var(--accent); }
-.offline-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text2);
-  font-size: 11px;
-  margin-left: auto;
-}
-.offline-status span { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
 .header-actions { display: flex; gap: 8px; margin-left: auto; }
 .header-icon-button {
   display: grid;
@@ -720,7 +711,6 @@ button, input, textarea, select { font: inherit; }
   .app-page .qr-preview-card { position: sticky; top: 82px; }
 }
 @media (max-width: 480px) {
-  .offline-status { display: none; }
   .sidebar-brand { height: 60px; }
   .main-content { padding-top: 20px; }
   .scan-preview { min-height: 240px; }
@@ -728,3 +718,21 @@ button, input, textarea, select { font: inherit; }
 }
 [data-theme="light"] .app-page > .sidebar { background: rgba(255,255,255,.94); }
 [data-theme="light"] .mobile-navbar { box-shadow: 0 -8px 28px rgba(15,23,42,.08); }
+
+@media (min-width: 769px) {
+  .sidebar-brand { max-width: 1120px; }
+  .main-content {
+    width: min(100%, 1120px);
+    padding: 32px 24px calc(100px + env(safe-area-inset-bottom));
+  }
+  .app-page .converter-main {
+    max-width: 1120px;
+    padding: 32px 24px calc(100px + env(safe-area-inset-bottom));
+  }
+  .app-page .tool-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+  }
+  .app-page .tool-card { min-height: 144px; padding: 18px; }
+  .app-page .scan-main { max-width: 800px; margin: 0 auto; }
+}

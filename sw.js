@@ -3,7 +3,7 @@
 // Ganti CACHE_VERSION setiap kali ada update agar SW refresh
 // ============================================================
 
-const CACHE_VERSION = "ucupz-v9";
+const CACHE_VERSION = "ucupz-v10";
 const CACHE_STATIC  = CACHE_VERSION + "-static";
 
 // File yang di-cache untuk offline

@@ -66,7 +66,6 @@ function renderSidebar(activePage) {
           <span class="brand-icon" aria-hidden="true"><img src="../favicon-512.png" alt="" /></span>
           <span class="brand-name">Ucupz <span>${activePage === "converter" ? "Convert" : activePage === "scan" ? "Scan QR" : "QR Code"}</span></span>
         </a>
-        <span class="offline-status"><span aria-hidden="true"></span> Offline Ready</span>
         <div class="header-actions">
           <button class="header-icon-button install-app-button" type="button" data-action="install-app" aria-label="Instal aplikasi" title="Instal aplikasi">Instal</button>
           <button class="header-icon-button" type="button" data-action="toggle-theme" aria-label="Ganti tema" title="Ganti tema">☼</button>
@@ -298,13 +297,13 @@ function hexToRgba(hex, alpha) {
       #batch-modal-overlay.show { opacity: 1; visibility: visible; }
 
       #batch-modal-card {
-        background: #13132a;
-        border: 1px solid rgba(255,255,255,0.09);
+        background: var(--surface, #0f172a);
+        border: 1px solid var(--border, rgba(255,255,255,0.09));
         border-radius: 20px;
         padding: 28px 28px 24px;
-        width: 100%; max-width: 560px;
+        width: 100%; max-width: 720px;
         max-height: 90vh; overflow-y: auto;
-        box-shadow: 0 32px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,106,255,0.12);
+        box-shadow: 0 24px 56px rgba(2,6,23,0.3), 0 0 0 1px rgba(124,106,255,0.12);
         transform: scale(0.92) translateY(16px);
         transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
         position: relative;
@@ -333,7 +332,7 @@ function hexToRgba(hex, alpha) {
         font-size: 18px; cursor: pointer; padding: 4px 8px;
         border-radius: 6px; transition: all 0.18s ease;
       }
-      .batch-close:hover { color: var(--text, #eeedf8); background: rgba(255,255,255,0.06); }
+      .batch-close:hover { color: var(--text, #eeedf8); background: var(--bg3, rgba(255,255,255,0.06)); }
 
       /* Mode tabs */
       .batch-mode-tabs {
@@ -426,12 +425,12 @@ function hexToRgba(hex, alpha) {
       .batch-actions { display: flex; gap: 10px; margin-top: 4px; }
       .batch-btn-cancel {
         padding: 10px 18px; border-radius: 9px;
-        border: 1px solid rgba(255,255,255,0.10);
+        border: 1px solid var(--border2, rgba(255,255,255,0.10));
         background: transparent; color: var(--text2, #8887a4);
         font-family: var(--font-body, sans-serif); font-size: 13.5px; font-weight: 500;
         cursor: pointer; transition: all 0.18s ease;
       }
-      .batch-btn-cancel:hover { background: rgba(255,255,255,0.06); color: var(--text, #eeedf8); }
+      .batch-btn-cancel:hover { background: var(--bg3, rgba(255,255,255,0.06)); color: var(--text, #eeedf8); }
       .batch-btn-run {
         flex: 1; padding: 10px 18px; border-radius: 9px; border: none;
         background: var(--accent, #7c6aff); color: #fff;
