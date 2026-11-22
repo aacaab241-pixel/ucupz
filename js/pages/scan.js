@@ -57,6 +57,11 @@ function renderSidebar(activePage) {
     { id:"scan",      href:"scan.html",      label:"Scan QR", labelShort:"Scan QR" },
     { id:"qrcode",    href:"qrcode.html",    label:"QR Code", labelShort:"QR Code" },
   ];
+  const desktopItems = pages.map(page => {
+    const active = activePage === page.id;
+    return `<a href="${page.href}" class="desktop-nav-item ${active ? "active" : ""}"
+      aria-current="${active ? "page" : "false"}">${page.labelShort}</a>`;
+  }).join("");
 
   const sidebar = document.getElementById("sidebar");
   if (sidebar) {
@@ -66,8 +71,8 @@ function renderSidebar(activePage) {
           <span class="brand-icon" aria-hidden="true"><img src="../favicon-512.png" alt="" /></span>
           <span class="brand-name">Ucupz <span>${activePage === "converter" ? "Convert" : activePage === "scan" ? "Scan QR" : "QR Code"}</span></span>
         </a>
+        <nav class="desktop-navbar" aria-label="Navigasi halaman">${desktopItems}</nav>
         <div class="header-actions">
-          <button class="header-icon-button install-app-button" type="button" data-action="install-app" aria-label="Instal aplikasi" title="Instal aplikasi">Instal</button>
           <button class="header-icon-button" type="button" data-action="toggle-theme" aria-label="Ganti tema" title="Ganti tema">☼</button>
         </div>
       </div>
@@ -104,37 +109,75 @@ function renderSidebar(activePage) {
     themeButton.onclick = toggleTheme;
   }
 
-  const installButton = document.querySelector('[data-action="install-app"]');
-  if (installButton) {
-    installButton.onclick = installApp;
-    updateInstallButton();
-  }
+  updateInstallNotice();
 }
 
 let installPromptEvent = null;
+const INSTALL_NOTICE_DISMISSED_KEY = "ucupz-install-notice-dismissed";
+
 function isAppInstalled() {
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 }
 
-function updateInstallButton() {
-  const button = document.querySelector(".install-app-button");
-  if (button) button.hidden = isAppInstalled();
+function updateInstallNotice() {
+  const existingNotice = document.getElementById("install-notification");
+  let dismissed = false;
+  try {
+    dismissed = sessionStorage.getItem(INSTALL_NOTICE_DISMISSED_KEY) === "1";
+  } catch (error) {
+    console.warn("[UI] Status notifikasi instal tidak dapat dibaca:", error);
+  }
+  if (isAppInstalled() || dismissed) {
+    if (existingNotice) existingNotice.remove();
+    return;
+  }
+  if (existingNotice) return;
+
+  const sidebar = document.getElementById("sidebar");
+  if (!sidebar) return;
+  const notice = document.createElement("aside");
+  notice.id = "install-notification";
+  notice.className = "install-notification";
+  notice.setAttribute("role", "status");
+  notice.setAttribute("aria-live", "polite");
+  notice.innerHTML = `
+    <span class="install-notification-icon" aria-hidden="true">↓</span>
+    <span class="install-notification-copy">
+      <strong>Pasang Ucupz</strong>
+      <span>Akses alat favoritmu langsung dari perangkat.</span>
+    </span>
+    <button class="install-notification-action" type="button" data-action="install-app">Instal</button>
+    <button class="install-notification-close" type="button" data-action="dismiss-install" aria-label="Tutup notifikasi instal">×</button>
+  `;
+  sidebar.insertAdjacentElement("afterend", notice);
+  notice.querySelector('[data-action="install-app"]').onclick = installApp;
+  notice.querySelector('[data-action="dismiss-install"]').onclick = dismissInstallNotice;
+}
+
+function dismissInstallNotice() {
+  try {
+    sessionStorage.setItem(INSTALL_NOTICE_DISMISSED_KEY, "1");
+  } catch (error) {
+    console.warn("[UI] Status notifikasi instal tidak dapat disimpan:", error);
+  }
+  const notice = document.getElementById("install-notification");
+  if (notice) notice.remove();
 }
 
 window.addEventListener("beforeinstallprompt", event => {
   event.preventDefault();
   installPromptEvent = event;
-  updateInstallButton();
+  updateInstallNotice();
 });
 
 window.addEventListener("appinstalled", () => {
   installPromptEvent = null;
-  updateInstallButton();
+  updateInstallNotice();
 });
 
 async function installApp() {
   if (isAppInstalled()) {
-    updateInstallButton();
+    updateInstallNotice();
     return;
   }
   if (!installPromptEvent) {
@@ -149,7 +192,7 @@ async function installApp() {
     showToast("Instalasi gagal. Coba lagi melalui menu browser.", "error");
   }
   installPromptEvent = null;
-  updateInstallButton();
+  updateInstallNotice();
 }
 
 function toggleTheme() {
